@@ -1,0 +1,13 @@
+build/
+build-release/
+_deps/
+out/
+.vs/
+.vscode/settings.json
+.cache/
+CMakeUserPresets.json
+*.user
+*.suo
+*.sln.docinfo
+.idea/
+cmake-build-*/
