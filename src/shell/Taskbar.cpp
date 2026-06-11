@@ -11,6 +11,23 @@ namespace shell {
 
 static constexpr float kHeight = 42.0f;
 
+static void appButton(const char* label, compositor::Window& win) {
+    bool focused = win.isFocused() && win.isOpen();
+
+    if (focused) {
+        // Brighter colour when this app's window has focus
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.28f,0.50f,0.90f,1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f,0.62f,1.00f,1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.48f,0.72f,1.00f,1.00f));
+    }
+
+    if (ImGui::Button(label))
+        win.requestFocus();
+
+    if (focused)
+        ImGui::PopStyleColor(3);
+}
+
 void Taskbar::draw(core::Application& app,
                    apps::TaskManager&    taskMgr,
                    apps::FileExplorerApp& fileExp,
@@ -30,22 +47,22 @@ void Taskbar::draw(core::Application& app,
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoNav;
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.15f, 0.92f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.04f, 0.04f, 0.12f, 0.96f));
     ImGui::Begin("##taskbar", nullptr, flags);
     ImGui::PopStyleColor();
 
     ImGui::SetCursorPosY((kHeight - ImGui::GetFrameHeight()) * 0.5f);
 
     // ── Left cluster: app launcher buttons ───────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f,0.25f,0.5f,0.8f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f,0.45f,0.8f,1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.35f,0.55f,1.0f,1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.14f,0.24f,0.50f,0.85f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f,0.40f,0.78f,1.00f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.32f,0.54f,1.00f,1.00f));
 
-    if (ImGui::Button(" [F] Files "))   fileExp.toggle();
+    appButton(" [F] Files ",    fileExp);
     ImGui::SameLine(0, 4);
-    if (ImGui::Button(" [I] Sys Info ")) sysInfo.toggle();
+    appButton(" [I] Sys Info ", sysInfo);
     ImGui::SameLine(0, 4);
-    if (ImGui::Button(" [T] Tasks "))   taskMgr.toggle();
+    appButton(" [T] Tasks ",    taskMgr);
 
     ImGui::PopStyleColor(3);
 
@@ -63,8 +80,35 @@ void Taskbar::draw(core::Application& app,
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f,0.2f,0.2f,1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f,0.3f,0.3f,1.0f));
     if (ImGui::Button(" PWR "))
-        app.requestQuit();
+        ImGui::OpenPopup("##tbpwrconfirm");
     ImGui::PopStyleColor(3);
+
+    // PWR confirmation modal (anchored to taskbar)
+    ImGui::SetNextWindowPos({W * 0.5f, H - kHeight}, ImGuiCond_Always, {0.5f, 1.0f});
+    ImGui::SetNextWindowSize({280, 110}, ImGuiCond_Always);
+    if (ImGui::BeginPopupModal("##tbpwrconfirm", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove)) {
+        ImGui::Spacing();
+        ImGui::SetCursorPosX((280 - ImGui::CalcTextSize("Shut down CSOPESY?").x) * 0.5f);
+        ImGui::Text("Shut down CSOPESY?");
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        float bw = 90.0f;
+        ImGui::SetCursorPosX((280 - bw * 2 - 12) * 0.5f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.6f,0.1f,0.1f,0.9f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f,0.2f,0.2f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f,0.3f,0.3f,1.0f));
+        if (ImGui::Button("Shut Down", {bw, 0})) {
+            ImGui::CloseCurrentPopup();
+            app.requestQuit();
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::SameLine(0, 12);
+        if (ImGui::Button("Cancel", {bw, 0}))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     ImGui::End();
 }

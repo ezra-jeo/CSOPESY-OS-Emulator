@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include "compositor/Compositor.h"
+#include "core/Theme.h"
 
 #include <stdexcept>
 #include <cstdio>
@@ -32,7 +33,6 @@ void Application::initGLFW() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    // Use primary monitor resolution for a true fullscreen feel
     GLFWmonitor* monitor  = glfwGetPrimaryMonitor();
     const GLFWvidmode* vm = glfwGetVideoMode(monitor);
     int w = vm ? vm->width  : 1280;
@@ -43,7 +43,7 @@ void Application::initGLFW() {
         throw std::runtime_error("Failed to create GLFW window");
 
     glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1); // vsync
+    glfwSwapInterval(1);
 }
 
 void Application::initImGui() {
@@ -54,6 +54,12 @@ void Application::initImGui() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+    core::applyTheme();
+
+    // Load custom font; fall back to ImGui default if the file is absent
+    ImFont* font = io.Fonts->AddFontFromFileTTF("assets/fonts/LiberationSans.ttf", 15.0f);
+    if (!font)
+        io.Fonts->AddFontDefault();
 
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -62,14 +68,20 @@ void Application::initImGui() {
 void Application::run() {
     compositor::Compositor compositor(*this);
 
+    double prevTime = glfwGetTime();
+
     while (running_ && !glfwWindowShouldClose(window_)) {
         glfwPollEvents();
+
+        double now = glfwGetTime();
+        float dt = static_cast<float>(now - prevTime);
+        prevTime = now;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        compositor.render();
+        compositor.render(dt);
 
         ImGui::Render();
 

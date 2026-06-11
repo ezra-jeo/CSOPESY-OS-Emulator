@@ -10,15 +10,22 @@ public:
 
     virtual void draw() = 0;
 
-    bool isOpen() const { return open_; }
+    bool isOpen()   const { return open_; }
+    bool isFocused() const { return focused_; }
+
     void setOpen(bool v) { open_ = v; }
     void toggle()        { open_ = !open_; }
+
+    // Opens the window and requests an ImGui focus grab on the next draw().
+    void requestFocus() { open_ = true; focusRequested_ = true; }
 
     const std::string& title() const { return title_; }
 
 protected:
     std::string title_;
-    bool        open_{ false };
+    bool open_{ false };
+    bool focused_{ false };
+    bool focusRequested_{ false };
 };
 
 } // namespace compositor

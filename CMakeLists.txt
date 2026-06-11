@@ -43,6 +43,17 @@ target_include_directories(imgui PUBLIC
 )
 target_link_libraries(imgui PUBLIC glfw)
 
+# stb (header-only, no CMakeLists — use Populate, not MakeAvailable)
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        5736b15f7ea0ffb08dd38af21067c314d6a3aae9
+)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+    FetchContent_Populate(stb)
+endif()
+
 # ── OpenGL ─────────────────────────────────────────────────────────────────────
 find_package(OpenGL REQUIRED)
 
@@ -51,6 +62,8 @@ set(SOURCES
     src/main.cpp
     src/core/Application.cpp
     src/core/Clock.cpp
+    src/core/Texture.cpp
+    src/core/Theme.cpp
     src/compositor/Compositor.cpp
     src/compositor/Window.cpp
     src/compositor/WindowManager.cpp
@@ -64,7 +77,7 @@ set(SOURCES
 
 add_executable(csopesy ${SOURCES})
 
-target_include_directories(csopesy PRIVATE src)
+target_include_directories(csopesy PRIVATE src ${stb_SOURCE_DIR})
 target_link_libraries(csopesy PRIVATE imgui OpenGL::GL glfw)
 
 # Copy assets next to the executable

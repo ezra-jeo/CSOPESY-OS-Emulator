@@ -1,5 +1,6 @@
 #pragma once
 #include "WindowManager.h"
+#include "shell/BootSequence.h"
 
 namespace core { class Application; }
 namespace shell { class Desktop; class Taskbar; }
@@ -12,12 +13,12 @@ public:
     explicit Compositor(core::Application& app);
     ~Compositor();
 
-    // Called once per frame inside the ImGui frame.
-    void render();
+    void render(float dt);
 
 private:
     core::Application& app_;
     WindowManager      wm_;
+    shell::BootSequence boot_;
 
     // Non-owning pointers into wm_ (wm_ owns them via unique_ptr)
     apps::TaskManager*    taskManager_{ nullptr };

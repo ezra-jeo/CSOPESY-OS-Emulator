@@ -7,8 +7,8 @@ namespace apps {
 
 struct ProcessRow {
     std::string name;
-    float       cpu;   // percent
-    int         memory; // MB
+    float       cpu;
+    int         memory;
     std::string status;
 };
 
@@ -18,7 +18,18 @@ public:
     void draw() override;
 
 private:
+    void drawProcesses();
+    void drawPerformance();
+
     std::vector<ProcessRow> processes_;
+    int   selectedRow_{ -1 };
+
+    // Performance rolling buffers (sampled at ~10 Hz)
+    float cpuHist_[90]{};
+    float memHist_[90]{};
+    int   histOffset_{ 0 };
+    float plotAccum_{ 0.0f };
+    float simTime_{ 0.0f };
 };
 
 } // namespace apps
