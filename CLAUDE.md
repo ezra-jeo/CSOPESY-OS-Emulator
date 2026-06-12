@@ -38,7 +38,7 @@ Keep the subject line ≤ 72 characters. Use the body for *why*, not *what*.
 
 ## Code style
 
-- C++17, no exceptions in hot paths.
+- C++20, no exceptions in hot paths.
 - One class per header/source pair; filenames match the class name (`PascalCase`).
 - Namespaces mirror the folder: `core::`, `compositor::`, `shell::`, `apps::`.
 - No comments unless the *why* is non-obvious.
@@ -52,7 +52,8 @@ cmake --build build --parallel
 ./build/csopesy
 ```
 
-Requires: CMake ≥ 3.16, GCC/Clang C++17, OpenGL 3.3, libX11/libXrandr dev headers.
+Requires: CMake ≥ 3.16, GCC 11+ / Clang 13+ / MSVC 2022 (C++20), OpenGL 3.3.
+Linux also needs: libX11/libXrandr/libXinerama/libXcursor/libXi dev headers.
 FetchContent downloads GLFW and Dear ImGui on first configure (needs network).
 
 ## Shutdown rule
