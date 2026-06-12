@@ -6,6 +6,7 @@
 #include "apps/SystemInfoApp.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace shell {
 
@@ -32,6 +33,7 @@ void Taskbar::draw(core::Application& app,
 
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.15f, 0.92f));
     ImGui::Begin("##taskbar", nullptr, flags);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
     ImGui::PopStyleColor();
 
     ImGui::SetCursorPosY((kHeight - ImGui::GetFrameHeight()) * 0.5f);
