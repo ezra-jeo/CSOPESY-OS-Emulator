@@ -38,9 +38,14 @@ void Application::initGLFW() {
     int w = vm ? vm->width  : 1280;
     int h = vm ? vm->height : 720;
 
-    window_ = glfwCreateWindow(w, h, "CSOPESY Desktop OS Emulator", nullptr, nullptr);
+    window_ = glfwCreateWindow(w, h, "CSOPESY Desktop OS Emulator", monitor, nullptr);
     if (!window_)
         throw std::runtime_error("Failed to create GLFW window");
+
+    // Swallow Alt+F4 / OS close requests — only the PWR button may exit.
+    glfwSetWindowCloseCallback(window_, [](GLFWwindow* w) {
+        glfwSetWindowShouldClose(w, GLFW_FALSE);
+    });
 
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(1); // vsync

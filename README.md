@@ -42,7 +42,7 @@ Install the **CMake Tools** extension, then:
 | Open System Info | Taskbar button (right of left cluster) |
 | Shutdown / exit | **PWR** button on desktop or taskbar |
 
-> The application **must** be closed via the PWR button (rubric requirement). Window-close (×) is disabled in Release builds.
+> The application **must** be closed via the PWR button (rubric requirement). The window is borderless fullscreen (no ✕ button), and Alt+F4 is suppressed via a GLFW close callback. The only valid exit path is the PWR button.
 
 ## Rubric components
 
