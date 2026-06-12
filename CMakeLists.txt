@@ -52,7 +52,6 @@ set(SOURCES
     src/core/Application.cpp
     src/core/Clock.cpp
     src/compositor/Compositor.cpp
-    src/compositor/Window.cpp
     src/compositor/WindowManager.cpp
     src/shell/Desktop.cpp
     src/shell/Taskbar.cpp
