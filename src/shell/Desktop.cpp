@@ -21,8 +21,7 @@ void Desktop::draw(core::Application& app) {
         ImGuiWindowFlags_NoMove       |
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_NoInputs;
+        ImGuiWindowFlags_NoNav;
 
     ImGui::Begin("##desktop", nullptr, flags);
 
