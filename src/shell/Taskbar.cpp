@@ -140,8 +140,26 @@ void Taskbar::draw(core::Application& app,
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.20f, 0.20f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.00f, 0.30f, 0.30f, 1.00f));
     if (ImGui::Button(" PWR ", {0, kBtnH}))
-        app.requestQuit();
+        ImGui::OpenPopup("##pwr_confirm");
     ImGui::PopStyleColor(3);
+
+    // Confirmation Modal
+    ImGui::SetNextWindowPos({W * 0.5f, H * 0.5f}, ImGuiCond_Always, {0.5f, 0.5f});
+    if (ImGui::BeginPopupModal("##pwr_confirm", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        ImGui::TextColored({1.0f,0.4f,0.4f,1.0f}, "Shut down CSOPESY?");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::Button("Confirm", {120, 0})) {
+            ImGui::CloseCurrentPopup();
+            app.requestQuit();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", {120, 0}))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
 
     ImGui::End();
 }
