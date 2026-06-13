@@ -39,7 +39,8 @@ void Application::initGLFW() {
     int w = vm ? vm->width  : 1280;
     int h = vm ? vm->height : 720;
 
-    window_ = glfwCreateWindow(w, h, "CSOPESY Desktop OS Emulator", monitor, nullptr);
+    // Borderless windowed (not exclusive fullscreen) so OBS/DWM can composite every frame.
+    window_ = glfwCreateWindow(w, h, "CSOPESY Desktop OS Emulator", nullptr, nullptr);
     if (!window_)
         throw std::runtime_error("Failed to create GLFW window");
 
