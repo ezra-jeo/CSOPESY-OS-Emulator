@@ -58,6 +58,7 @@ void Application::initImGui() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.MouseDrawCursor = true; // render software cursor so OBS captures it
 
     ImGui::StyleColorsDark();
     core::applyTheme();
