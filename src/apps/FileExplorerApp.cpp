@@ -1,13 +1,19 @@
 #include "FileExplorerApp.h"
 #include <imgui.h>
+#include <cctype>
 
 namespace apps {
 
-static const char* kDirs[]  = { "C:\\", "Documents", "Downloads", "System32", "Users", "Temp" };
-static const char* kFiles[] = {
-    "csopesy.exe", "README.txt", "config.ini", "log.txt",
-    "wallpaper.bmp", "font.ttf",  "report.pdf", "notes.txt"
+static const char* kDirs[] = { "C:\\", "Documents", "Downloads", "System32", "Users", "Temp" };
+static const char* kDirFiles[][8] = {
+    { "csopesy.exe", "README.txt",     "config.ini",  nullptr },   // C:\
+    { "report.pdf",  "notes.txt",      "thesis.docx", nullptr },   // Documents
+    { "installer.exe","wallpaper.bmp", "archive.zip", nullptr },   // Downloads
+    { "kernel32.dll", "ntdll.dll",     "cmd.exe",     nullptr },   // System32
+    { "Admin",        "Guest",         "DefaultUser", nullptr },   // Users
+    { "tmp001.tmp",   "tmp002.tmp",    nullptr },                   // Temp
 };
+static const int kDirFileCounts[] = { 3, 3, 3, 3, 3, 2 };
 
 FileExplorerApp::FileExplorerApp() : compositor::Window("File Explorer") {}
 
@@ -25,6 +31,17 @@ void FileExplorerApp::draw() {
     ImGui::InputTextWithHint("##srch", "Search files...", searchBuf_, sizeof(searchBuf_));
     ImGui::Separator();
 
+    auto containsCI = [](const char* hay, const char* needle) {
+        if (!needle || needle[0] == '\0') return true;
+        for (; *hay; ++hay) {
+            const char* h = hay; const char* n = needle;
+            while (*h && *n && std::tolower((unsigned char)*h) == std::tolower((unsigned char)*n))
+                ++h, ++n;
+            if (!*n) return true;
+        }
+        return false;
+    };
+
     // ── Two-panel layout ─────────────────────────────────────────────────
     float panelH = ImGui::GetContentRegionAvail().y - 24;
 
@@ -34,30 +51,39 @@ void FileExplorerApp::draw() {
     ImGui::Separator();
     for (int i = 0; i < (int)(sizeof(kDirs)/sizeof(*kDirs)); ++i) {
         bool sel = (selectedDir_ == i);
-        if (ImGui::Selectable(kDirs[i], sel))
-            selectedDir_ = i;
+        if (ImGui::Selectable(kDirs[i], sel)) {
+            selectedDir_  = i;
+            selectedFile_ = -1;
+        }
     }
     ImGui::EndChild();
 
     ImGui::SameLine();
 
-    // Right: file list
+    // Right: file list filtered by searchBuf_
     ImGui::BeginChild("##files", {0, panelH}, true);
     ImGui::TextColored({0.6f,0.8f,1.0f,1.0f}, "%s", kDirs[selectedDir_]);
     ImGui::Separator();
-    for (int i = 0; i < (int)(sizeof(kFiles)/sizeof(*kFiles)); ++i) {
+    const char** files = kDirFiles[selectedDir_];
+    int count = kDirFileCounts[selectedDir_];
+    int visibleCount = 0;
+    for (int i = 0; i < count; ++i) {
+        if (!containsCI(files[i], searchBuf_)) continue;
         bool sel = (selectedFile_ == i);
-        if (ImGui::Selectable(kFiles[i], sel))
+        if (ImGui::Selectable(files[i], sel))
             selectedFile_ = i;
+        ++visibleCount;
     }
+    if (visibleCount == 0)
+        ImGui::TextDisabled("No results");
     ImGui::EndChild();
 
     // ── Status bar ────────────────────────────────────────────────────────
     ImGui::Separator();
-    if (selectedFile_ >= 0)
-        ImGui::TextDisabled("Selected: %s", kFiles[selectedFile_]);
+    if (selectedFile_ >= 0 && selectedFile_ < count)
+        ImGui::TextDisabled("Selected: %s", files[selectedFile_]);
     else
-        ImGui::TextDisabled("%d items", (int)(sizeof(kFiles)/sizeof(*kFiles)));
+        ImGui::TextDisabled("%d items", visibleCount);
 
     ImGui::End();
 }

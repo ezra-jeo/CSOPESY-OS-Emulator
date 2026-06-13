@@ -48,7 +48,7 @@ void SystemInfoApp::draw() {
     ImGui::TextColored({0.4f,0.8f,1.0f,1.0f}, "Audio");
     ImGui::Text("Volume:");     ImGui::SameLine(120);
     ImGui::SetNextItemWidth(140);
-    ImGui::SliderFloat("##vol", &vol_, 0.0f, 1.0f, "%.0f%%");
+    ImGui::SliderFloat("##vol", &vol_, 0.0f, 100.0f, "%.0f%%");
 
     ImGui::End();
 }

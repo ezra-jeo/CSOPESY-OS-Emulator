@@ -9,7 +9,7 @@ public:
     void draw() override;
 
 private:
-    float vol_{ 0.72f };
+    float vol_{ 72.0f };
 };
 
 } // namespace apps
