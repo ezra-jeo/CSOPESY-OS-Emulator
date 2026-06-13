@@ -1,9 +1,8 @@
 #pragma once
+#include <imgui.h>
 
 namespace shell {
 
-// Phase 5 — BIOS text crawl → CSOPESY ASCII splash → loading bar → desktop.
-// Stub: not wired into the main loop yet.
 class BootSequence {
 public:
     enum class State { Bios, Splash, Loading, Done };
@@ -13,8 +12,11 @@ public:
     bool isDone() const { return state_ == State::Done; }
 
 private:
-    State state_{ State::Done }; // skip boot for now; set to Bios in Phase 5
+    State state_{ State::Bios };
     float timer_{ 0.0f };
+    float loadProgress_{ 0.0f };
+
+    void skip() { state_ = State::Done; }
 };
 
 } // namespace shell

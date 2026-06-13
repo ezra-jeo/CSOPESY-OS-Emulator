@@ -66,15 +66,20 @@ void Application::initImGui() {
 
 void Application::run() {
     compositor::Compositor compositor(*this);
+    double lastTime = glfwGetTime();
 
     while (running_ && !glfwWindowShouldClose(window_)) {
         glfwPollEvents();
+
+        double now = glfwGetTime();
+        float dt = static_cast<float>(now - lastTime);
+        lastTime = now;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        compositor.render();
+        compositor.render(dt);
 
         ImGui::Render();
 

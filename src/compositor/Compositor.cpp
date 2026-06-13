@@ -7,8 +7,6 @@
 #include "apps/FileExplorerApp.h"
 #include "apps/SystemInfoApp.h"
 
-#include <imgui.h>
-
 namespace compositor {
 
 Compositor::Compositor(core::Application& app) : app_(app) {
@@ -19,7 +17,13 @@ Compositor::Compositor(core::Application& app) : app_(app) {
 
 Compositor::~Compositor() = default;
 
-void Compositor::render() {
+void Compositor::render(float dt) {
+    if (!boot_.isDone()) {
+        boot_.update(dt);
+        boot_.draw();
+        return;
+    }
+
     // Layer 1: Desktop (fullscreen base — must be drawn first)
     shell::Desktop::draw(app_);
 
