@@ -31,7 +31,9 @@ void TaskManager::draw() {
         {io.DisplaySize.x * 0.5f - 310, io.DisplaySize.y * 0.5f - 210},
         ImGuiCond_FirstUseEver);
 
-    if (!ImGui::Begin(title_.c_str(), &open_)) { ImGui::End(); return; }
+    if (focusRequested_) { ImGui::SetNextWindowFocus(); focusRequested_ = false; }
+    if (!ImGui::Begin(title_.c_str(), &open_)) { focused_ = false; ImGui::End(); return; }
+    focused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
     ImGui::TextColored({0.4f,0.8f,1.0f,1.0f}, "CSOPESY Task Manager");
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 80);

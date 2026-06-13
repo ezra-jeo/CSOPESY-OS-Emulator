@@ -24,7 +24,9 @@ void FileExplorerApp::draw() {
         {io.DisplaySize.x * 0.3f, io.DisplaySize.y * 0.25f},
         ImGuiCond_FirstUseEver);
 
-    if (!ImGui::Begin(title_.c_str(), &open_)) { ImGui::End(); return; }
+    if (focusRequested_) { ImGui::SetNextWindowFocus(); focusRequested_ = false; }
+    if (!ImGui::Begin(title_.c_str(), &open_)) { focused_ = false; ImGui::End(); return; }
+    focused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
     // ── Address / search bar ──────────────────────────────────────────────
     ImGui::SetNextItemWidth(-1);

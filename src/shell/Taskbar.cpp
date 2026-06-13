@@ -12,10 +12,22 @@ namespace shell {
 
 static constexpr float kHeight = 42.0f;
 
+static void pushButtonColors(bool active) {
+    if (active) {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f,0.55f,1.0f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f,0.65f,1.0f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.45f,0.75f,1.0f,1.0f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f,0.25f,0.5f,0.8f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f,0.45f,0.8f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.35f,0.55f,1.0f,1.0f));
+    }
+}
+
 void Taskbar::draw(core::Application& app,
-                   apps::TaskManager&    taskMgr,
+                   apps::TaskManager&     taskMgr,
                    apps::FileExplorerApp& fileExp,
-                   apps::SystemInfoApp&  sysInfo)
+                   apps::SystemInfoApp&   sysInfo)
 {
     ImGuiIO& io = ImGui::GetIO();
     float W = io.DisplaySize.x;
@@ -38,17 +50,19 @@ void Taskbar::draw(core::Application& app,
 
     ImGui::SetCursorPosY((kHeight - ImGui::GetFrameHeight()) * 0.5f);
 
-    // ── Left cluster: app launcher buttons ───────────────────────────────
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f,0.25f,0.5f,0.8f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f,0.45f,0.8f,1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.35f,0.55f,1.0f,1.0f));
-
-    if (ImGui::Button(" [F] Files "))   fileExp.toggle();
+    // ── Left cluster: app launcher buttons (highlighted when focused) ─────
+    pushButtonColors(fileExp.isFocused());
+    if (ImGui::Button(" [F] Files "))   fileExp.isOpen() ? fileExp.requestFocus() : fileExp.toggle();
+    ImGui::PopStyleColor(3);
     ImGui::SameLine(0, 4);
-    if (ImGui::Button(" [I] Sys Info ")) sysInfo.toggle();
-    ImGui::SameLine(0, 4);
-    if (ImGui::Button(" [T] Tasks "))   taskMgr.toggle();
 
+    pushButtonColors(sysInfo.isFocused());
+    if (ImGui::Button(" [I] Sys Info ")) sysInfo.isOpen() ? sysInfo.requestFocus() : sysInfo.toggle();
+    ImGui::PopStyleColor(3);
+    ImGui::SameLine(0, 4);
+
+    pushButtonColors(taskMgr.isFocused());
+    if (ImGui::Button(" [T] Tasks "))   taskMgr.isOpen() ? taskMgr.requestFocus() : taskMgr.toggle();
     ImGui::PopStyleColor(3);
 
     // ── Right cluster: clock + PWR ────────────────────────────────────────
