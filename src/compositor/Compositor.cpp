@@ -22,6 +22,12 @@ Compositor::Compositor(core::Application& app) : app_(app) {
 Compositor::~Compositor() = default;
 
 void Compositor::render() {
+    if (!bootSeq_.isDone()) {
+        bootSeq_.update(ImGui::GetIO().DeltaTime);
+        bootSeq_.draw();
+        return;
+    }
+
     // Layer 1: Desktop (fullscreen base — must be drawn first)
     shell::Desktop::draw(app_);
 

@@ -13,7 +13,7 @@ public:
     bool isDone() const { return state_ == State::Done; }
 
 private:
-    State state_{ State::Done }; // skip boot for now; set to Bios in Phase 5
+    State state_{ State::Bios };
     float timer_{ 0.0f };
 };
 

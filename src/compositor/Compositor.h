@@ -1,5 +1,6 @@
 #pragma once
 #include "WindowManager.h"
+#include "shell/BootSequence.h"
 
 namespace core { class Application; }
 namespace shell { class Desktop; class Taskbar; }
@@ -17,7 +18,8 @@ public:
 
 private:
     core::Application& app_;
-    WindowManager      wm_;
+    shell::BootSequence bootSeq_;
+    WindowManager       wm_;
 
     // Non-owning pointers into wm_ (wm_ owns them via unique_ptr)
     apps::TaskManager*    taskManager_{ nullptr };
