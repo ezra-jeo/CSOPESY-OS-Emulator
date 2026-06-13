@@ -51,19 +51,21 @@ void Taskbar::draw(core::Application& app,
     ImGui::SetCursorPosY((kHeight - ImGui::GetFrameHeight()) * 0.5f);
 
     // ── Left cluster: app launcher buttons (highlighted when focused) ─────
-    pushButtonColors(fileExp.isFocused());
+    pushButtonColors(fileExp.isOpen());
     if (ImGui::Button(" [F] Files "))   fileExp.isOpen() ? fileExp.requestFocus() : fileExp.toggle();
     ImGui::PopStyleColor(3);
     ImGui::SameLine(0, 4);
 
-    pushButtonColors(sysInfo.isFocused());
+    pushButtonColors(sysInfo.isOpen());
     if (ImGui::Button(" [I] Sys Info ")) sysInfo.isOpen() ? sysInfo.requestFocus() : sysInfo.toggle();
     ImGui::PopStyleColor(3);
     ImGui::SameLine(0, 4);
 
-    pushButtonColors(taskMgr.isFocused());
+    pushButtonColors(taskMgr.isOpen());
     if (ImGui::Button(" [T] Tasks "))   taskMgr.isOpen() ? taskMgr.requestFocus() : taskMgr.toggle();
     ImGui::PopStyleColor(3);
+    ImGui::SameLine(0, 4);
+
 
     // ── Right cluster: clock + PWR ────────────────────────────────────────
     std::string ts = core::now();
@@ -79,6 +81,7 @@ void Taskbar::draw(core::Application& app,
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.6f,0.1f,0.1f,0.9f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f,0.2f,0.2f,1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f,0.3f,0.3f,1.0f));
+
     if (ImGui::Button(" PWR "))
         ImGui::OpenPopup("##pwr_confirm");
     ImGui::PopStyleColor(3);
