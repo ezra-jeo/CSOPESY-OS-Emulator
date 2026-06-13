@@ -1,6 +1,7 @@
 #pragma once
 #include "WindowManager.h"
 #include "shell/BootSequence.h"
+#include "core/Texture.h"
 
 namespace core { class Application; }
 namespace apps  { class TaskManager; class FileExplorerApp; class SystemInfoApp; }
@@ -18,6 +19,7 @@ private:
     core::Application& app_;
     WindowManager      wm_;
     shell::BootSequence boot_;
+    core::Texture       wallpaper_;
 
     // Non-owning pointers into wm_ (wm_ owns them via unique_ptr)
     apps::TaskManager*     taskManager_{ nullptr };

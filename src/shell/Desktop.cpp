@@ -1,5 +1,4 @@
 #include "Desktop.h"
-#include "core/Application.h"
 #include "core/Clock.h"
 #include "core/Texture.h"
 
@@ -8,7 +7,7 @@
 
 namespace shell {
 
-void Desktop::draw(core::Application& app) {
+void Desktop::draw(const core::Texture& wallpaper) {
     ImGuiIO& io = ImGui::GetIO();
     float W = io.DisplaySize.x;
     float H = io.DisplaySize.y;
@@ -30,7 +29,6 @@ void Desktop::draw(core::Application& app) {
     ImVec2 p0{0, 0}, p1{W, H};
 
     // ── Wallpaper (texture or gradient fallback) ──────────────────────────
-    static core::Texture wallpaper = core::loadTexture("assets/wallpapers/wallpaper.jpg");
     if (wallpaper.valid()) {
         dl->AddImage((ImTextureID)(uintptr_t)wallpaper.id, p0, p1);
     } else {

@@ -13,6 +13,10 @@ Compositor::Compositor(core::Application& app) : app_(app) {
     taskManager_  = wm_.add<apps::TaskManager>();
     fileExplorer_ = wm_.add<apps::FileExplorerApp>();
     sysInfo_      = wm_.add<apps::SystemInfoApp>();
+
+    // Loaded here (GL context is current) and owned for the Compositor's
+    // lifetime, which ends inside Application::run() before glfwTerminate().
+    wallpaper_ = core::loadTexture("assets/wallpapers/wallpaper.jpg");
 }
 
 Compositor::~Compositor() = default;
@@ -25,7 +29,7 @@ void Compositor::render(float dt) {
     }
 
     // Layer 1: Desktop (fullscreen base — must be drawn first)
-    shell::Desktop::draw(app_);
+    shell::Desktop::draw(wallpaper_);
 
     // Layer 2: Floating app windows
     wm_.drawWindows();

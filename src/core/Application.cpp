@@ -10,10 +10,56 @@
 
 #include <stdexcept>
 #include <cstdio>
+#include <string>
+
+#if defined(_WIN32)
+#  include <windows.h>
+#  include <direct.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#  include <unistd.h>
+#  include <climits>
+#else
+#  include <unistd.h>
+#  include <climits>
+#endif
 
 namespace core {
 
+// Make asset loading (font, wallpaper) independent of the launch directory by
+// switching the working directory to the executable's own directory, next to
+// which CMake copies the assets/ folder.
+static void chdirToExecutableDir() {
+    std::string path;
+#if defined(_WIN32)
+    char buf[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, buf, sizeof(buf));
+    if (n == 0 || n >= sizeof(buf)) return;
+    path.assign(buf, n);
+#elif defined(__APPLE__)
+    char buf[PATH_MAX];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) != 0) return;
+    path.assign(buf);
+#else
+    char buf[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) return;
+    path.assign(buf, static_cast<size_t>(n));
+#endif
+
+    size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos) return;
+    path.resize(slash);
+#if defined(_WIN32)
+    _chdir(path.c_str());
+#else
+    if (chdir(path.c_str()) != 0) return;
+#endif
+}
+
 Application::Application() {
+    chdirToExecutableDir();
     initGLFW();
     initImGui();
 }

@@ -10,6 +10,26 @@
 
 namespace core {
 
+Texture::~Texture() {
+    if (id != 0) glDeleteTextures(1, &id);
+}
+
+Texture::Texture(Texture&& other) noexcept : id(other.id), w(other.w), h(other.h) {
+    other.id = 0;
+}
+
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this != &other) {
+        if (id != 0) glDeleteTextures(1, &id);
+        id = other.id; w = other.w; h = other.h;
+        other.id = 0;
+    }
+    return *this;
+}
+
+// NOTE: stb_image here only decodes trusted assets bundled with the app.
+// stb_image has had heap-overflow CVEs on malformed input — if this ever loads
+// user-supplied images, treat the path/data as untrusted and sandbox/validate.
 Texture loadTexture(const char* path) {
     Texture t;
     int channels;
