@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include "compositor/Compositor.h"
+#include "core/Theme.h"
 
 #include <stdexcept>
 #include <cstdio>
@@ -59,6 +60,12 @@ void Application::initImGui() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+    core::applyTheme();
+
+    ImGuiIO& io2 = ImGui::GetIO();
+    if (ImFont* f = io2.Fonts->AddFontFromFileTTF(
+            "assets/fonts/LiberationMono-Bold.ttf", 15.0f))
+        (void)f;
 
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 330");

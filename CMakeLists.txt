@@ -60,6 +60,7 @@ set(SOURCES
     src/core/Application.cpp
     src/core/Clock.cpp
     src/core/Texture.cpp
+    src/core/Theme.cpp
     src/compositor/Compositor.cpp
     src/compositor/WindowManager.cpp
     src/shell/Desktop.cpp
