@@ -30,7 +30,7 @@ void Desktop::draw(core::Application& app) {
     ImVec2 p0{0, 0}, p1{W, H};
 
     // ── Wallpaper (texture or gradient fallback) ──────────────────────────
-    static core::Texture wallpaper = core::loadTexture("assets/wallpapers/wallpaper.png");
+    static core::Texture wallpaper = core::loadTexture("assets/wallpapers/wallpaper.jpg");
     if (wallpaper.valid()) {
         dl->AddImage((ImTextureID)(uintptr_t)wallpaper.id, p0, p1);
     } else {
@@ -44,7 +44,7 @@ void Desktop::draw(core::Application& app) {
     }
 
     // ── OS label ──────────────────────────────────────────────────────────
-    const char* label = "CSOPESY OS";
+    const char* label = "CSOPESY Group 9 OS Emulator";
     ImVec2 lsz = ImGui::CalcTextSize(label);
     dl->AddText({(W - lsz.x) * 0.5f, H * 0.42f},
                 IM_COL32(255,255,255,30), label);
@@ -56,32 +56,6 @@ void Desktop::draw(core::Application& app) {
     float clockY = 8.0f;
     dl->AddText({clockX + 1, clockY + 1}, IM_COL32(0,0,0,180), ts.c_str());
     dl->AddText({clockX,     clockY},     IM_COL32(220,240,255,230), ts.c_str());
-
-    // ── PWR button (top-left corner) ─────────────────────────────────────
-    ImGui::SetCursorPos({12.0f, 8.0f});
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.6f, 0.1f, 0.1f, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f,0.2f,0.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f, 0.3f,0.3f, 1.0f));
-    if (ImGui::Button(" PWR "))
-        ImGui::OpenPopup("##pwr_confirm");
-    ImGui::PopStyleColor(3);
-
-    // ── Shutdown confirmation modal ───────────────────────────────────────
-    ImGui::SetNextWindowPos({W * 0.5f, H * 0.5f}, ImGuiCond_Always, {0.5f, 0.5f});
-    if (ImGui::BeginPopupModal("##pwr_confirm", nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
-        ImGui::TextColored({1.0f,0.4f,0.4f,1.0f}, "Shut down CSOPESY?");
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(120);
-        if (ImGui::Button("Confirm", {120, 0})) {
-            ImGui::CloseCurrentPopup();
-            app.requestQuit();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel", {120, 0}))
-            ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
 
     ImGui::End();
 }

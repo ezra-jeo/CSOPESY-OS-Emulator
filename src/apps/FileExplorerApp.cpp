@@ -6,7 +6,7 @@ namespace apps {
 
 static const char* kDirs[] = { "C:\\", "Documents", "Downloads", "System32", "Users", "Temp" };
 static const char* kDirFiles[][8] = {
-    { "csopesy.exe", "README.txt",     "config.ini",  nullptr },   // C:\
+    { "csopesy.exe", "README.txt",     "config.ini",  nullptr },   // C:
     { "report.pdf",  "notes.txt",      "thesis.docx", nullptr },   // Documents
     { "installer.exe","wallpaper.bmp", "archive.zip", nullptr },   // Downloads
     { "kernel32.dll", "ntdll.dll",     "cmd.exe",     nullptr },   // System32
