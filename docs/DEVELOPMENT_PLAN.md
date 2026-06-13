@@ -1,90 +1,101 @@
 # CSOPESY OS Emulator — Development Plan
 
-## Phases
+## Status summary
 
-### Phase 0 — Scaffold (DONE)
-- Full folder structure, CMake + FetchContent, `.gitignore`
-- `Application` with GLFW+ImGui init/loop/shutdown
-- All component classes exist as compiling stubs
-- Live clock visible in corner; PWR button closes the app
-- Three taskbar buttons toggle their respective (empty) windows
-
-**Exit criteria:** `cmake -S . -B build && cmake --build build` succeeds; window opens with clock + PWR.
-
----
-
-### Phase 1 — Desktop (Component 1)
-- Replace placeholder background with a real gradient drawn via `ImDrawList`
-  (`AddRectFilledMultiColor`) or load an XP-Bliss texture with `stb_image`
-- Polish corner clock (font, color, shadow)
-- PWR button: confirmation modal before exit
-
-**Exit criteria:** Component 1 fully satisfies rubric checklist.
+| Phase | Status |
+|-------|--------|
+| 0 — Scaffold | ✅ Done |
+| Code review fixes (A1–A4, D1–D2, N1–N2) | ✅ Done |
+| Bug fixes (vol slider, search, per-dir files) | ✅ Done |
+| 1 — Wallpaper + PWR modal | ✅ Done |
+| 2 — Boot sequence | ✅ Done |
+| 3 — Task Manager interactivity | ✅ Done |
+| 4 — Window focus & taskbar highlight | ✅ Done |
+| 5 — App screen polish | ✅ Done |
+| 6 — Theme + fonts | ✅ Done |
+| 7 — Docs & submission | ✅ Done |
 
 ---
 
-### Phase 2 — Taskbar (Component 2 chrome)
-- Fixed bottom panel with correct height and styling
-- Icon buttons: folder icon (File Explorer), monitor icon (System Info), chart icon (Task Manager)
-- Right-side cluster: VOL / NET / PWR icons + live time chip
-- Hover / active / tooltip states on all buttons
+## Phase 0 — Scaffold ✅
 
-**Exit criteria:** Taskbar looks polished; each button toggles the correct window.
-
----
-
-### Phase 3 — Task Manager (Component 3)
-- `ImGui::BeginTable` with columns: Process, CPU %, Memory (MB)
-- 10–15 dummy rows with realistic-looking values
-- Column headers sortable (ImGui sort specs)
-- "End Task" button per row (no-op or removes row for effect)
-
-**Exit criteria:** Task Manager window matches rubric screenshot.
+- Full folder structure, CMake + FetchContent (GLFW 3.4, ImGui v1.91.6)
+- `Application` GLFW/ImGui init/loop/shutdown
+- All component classes as compiling stubs
+- Live clock, PWR button, three taskbar buttons
 
 ---
 
-### Phase 4 — Two App Screens
-- **FileExplorerApp:** folder tree on left, file list on right, search bar at top
-- **SystemInfoApp:** OS version card, CPU/RAM bars, network status panel
-- Both windows are draggable, resizable, closeable
+## Phase 1 — Desktop Wallpaper + PWR Confirm ✅
 
-**Exit criteria:** Two visually distinct, non-trivial UI screens are functional.
+**Files:** `CMakeLists.txt`, `src/core/Texture.{h,cpp}`, `src/shell/Desktop.cpp`
 
----
-
-### Phase 5 — Boot Sequence (optional polish)
-- `BootSequence` state machine: BIOS text crawl → CSOPESY ASCII splash → loading bar → desktop
-- Custom monospace/pixel font loaded from `assets/fonts/`
-- Boot can be skipped with any key
-
-**Exit criteria:** Full boot-to-desktop sequence plays on startup.
+- stb_image via FetchContent; `core::Texture` helper loads PNG at first draw
+- Gradient fallback when `assets/wallpapers/wallpaper.png` is absent
+- PWR button opens `BeginPopupModal` → Confirm/Cancel before `requestQuit()`
 
 ---
 
-### Phase 6 — Polish & Submission
-- ImGui theme pass (colors, rounding, padding)
-- Window drag/focus/z-order niceties via `WindowManager`
-- Record seamless video: press Run/Debug → demo all components → PWR to exit
-- Build PPTX with embedded MP4, Architectural Diagram, code snippets
+## Phase 2 — Delta-time + Boot Sequence ✅
+
+**Files:** `src/core/Application.cpp`, `src/compositor/Compositor.{h,cpp}`, `src/shell/BootSequence.{h,cpp}`
+
+- `Application::run()` computes `float dt` from `glfwGetTime()` deltas
+- `Compositor::render(float dt)` gates boot before main layers
+- `BootSequence`: Bios(1.8 s) → Splash(1.8 s) → Loading(2.0 s) → Done
+- Any key press or mouse click skips immediately to desktop
 
 ---
 
-## Suggested Task Division
+## Phase 3 — Task Manager Interactivity ✅
 
-| Member | Ownership |
-|--------|-----------|
-| A | Core / Compositor / CMake / `Application`, `Window`, `WindowManager` |
-| B | Desktop wallpaper, clock, PWR, Taskbar styling (Phases 1–2) |
-| C | Task Manager table, FileExplorer, SystemInfo layouts (Phases 3–4) |
-| D | Boot sequence, theming, assets, video recording, PPT (Phases 5–6) |
+**Files:** `src/apps/TaskManager.{h,cpp}`
 
-Adjust to actual group size; pairs can co-own phases.
+- `ImGuiTableFlags_Sortable` — click column header to sort asc/desc
+- Index-based row loop; "End Task" button erases selected row
+- Performance tab: 90-sample rolling CPU/Memory `PlotLines` at 10 Hz
 
 ---
 
-## Open Questions (deliberate before Phase 1)
+## Phase 4 — Window Focus & Taskbar Active-State ✅
 
-1. **Wallpaper:** pure ImGui gradient (safest, zero assets) vs. bundled XP-Bliss image (needs `stb_image` + license note)?
-2. **App screens:** keep File Explorer + System Info, or swap one for a Terminal mock / Settings panel?
-3. **Boot sequence:** implement Phase 5, or go straight to desktop?
-4. **Window chrome:** draggable & resizable (ImGui default) vs. fixed-position panels?
+**Files:** `src/compositor/Window.h`, `src/apps/*.cpp`, `src/shell/Taskbar.cpp`
+
+- `Window` base gains `focused_`, `focusRequested_`, `requestFocus()`, `isFocused()`
+- Taskbar button color brightens when its window is the focused window
+- Clicking a taskbar button for an open window raises + focuses it
+
+---
+
+## Phase 5 — App Screen Polish ✅
+
+**Files:** `src/apps/SystemInfoApp.cpp`, `src/apps/FileExplorerApp.cpp`
+
+- SystemInfoApp: CPU and Memory bars animate via `sinf(GetTime())` so the screen feels live
+- FileExplorer: search bar filters per-directory file list (case-insensitive substring)
+
+---
+
+## Phase 6 — Theme + Fonts ✅
+
+**Files:** `CMakeLists.txt`, `src/core/Theme.{h,cpp}`, `src/core/Application.cpp`, `assets/fonts/LiberationMono-Bold.ttf`
+
+- `core::applyTheme()` — retro blue-dark palette, rounded corners, consistent spacing
+- LiberationMono-Bold 15 pt loaded from `assets/fonts/` at startup
+
+---
+
+## Phase 7 — Docs & Submission ✅
+
+**Files:** `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_PLAN.md`
+
+- Architecture diagram updated to include boot stage and all new classes
+- This plan updated with all phase statuses
+
+---
+
+## Submission checklist
+
+- [ ] Record demo video: launch → boot plays → skip or wait → desktop → open all 3 windows → sort Task Manager → End Task → Performance tab → search in File Explorer → System Info animated bars → PWR → confirm → exit
+- [ ] Build on the grader's machine: `cmake -S . -B build && cmake --build build --parallel && ./build/csopesy`
+- [ ] Verify **no force-quit** — only PWR button exits
