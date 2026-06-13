@@ -46,6 +46,10 @@ void FileExplorerApp::draw() {
 
     // ── Two-panel layout ─────────────────────────────────────────────────
     float panelH = ImGui::GetContentRegionAvail().y - 24;
+    if (panelH < 1.0f) panelH = 1.0f;
+
+    const char** files = kDirFiles[selectedDir_];
+    int count          = kDirFileCounts[selectedDir_];
 
     // Left: directory tree
     ImGui::BeginChild("##dirs", {140, panelH}, true);
@@ -56,6 +60,8 @@ void FileExplorerApp::draw() {
         if (ImGui::Selectable(kDirs[i], sel)) {
             selectedDir_  = i;
             selectedFile_ = -1;
+            files  = kDirFiles[selectedDir_];
+            count  = kDirFileCounts[selectedDir_];
         }
     }
     ImGui::EndChild();
@@ -66,14 +72,13 @@ void FileExplorerApp::draw() {
     ImGui::BeginChild("##files", {0, panelH}, true);
     ImGui::TextColored({0.6f,0.8f,1.0f,1.0f}, "%s", kDirs[selectedDir_]);
     ImGui::Separator();
-    const char** files = kDirFiles[selectedDir_];
-    int count = kDirFileCounts[selectedDir_];
     int visibleCount = 0;
     for (int i = 0; i < count; ++i) {
+        if (!files[i]) continue;
         if (!containsCI(files[i], searchBuf_)) continue;
         bool sel = (selectedFile_ == i);
         if (ImGui::Selectable(files[i], sel))
-            selectedFile_ = i;
+            selectedFile_ = (sel ? -1 : i);
         ++visibleCount;
     }
     if (visibleCount == 0)
@@ -82,7 +87,7 @@ void FileExplorerApp::draw() {
 
     // ── Status bar ────────────────────────────────────────────────────────
     ImGui::Separator();
-    if (selectedFile_ >= 0 && selectedFile_ < count)
+    if (selectedFile_ >= 0 && selectedFile_ < count && files[selectedFile_])
         ImGui::TextDisabled("Selected: %s", files[selectedFile_]);
     else
         ImGui::TextDisabled("%d items", visibleCount);

@@ -36,8 +36,10 @@ void TaskManager::draw() {
     focused_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
     ImGui::TextColored({0.4f,0.8f,1.0f,1.0f}, "CSOPESY Task Manager");
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 80);
-    ImGui::TextDisabled("Processes: %d", (int)processes_.size());
+    char procBuf[32];
+    snprintf(procBuf, sizeof(procBuf), "Processes: %d", (int)processes_.size());
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(procBuf).x);
+    ImGui::TextDisabled("%s", procBuf);
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("tmtabs")) {
