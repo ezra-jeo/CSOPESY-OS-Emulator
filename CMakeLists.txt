@@ -28,6 +28,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        013ac3beddff3dbffafd5177e7972067cd2b5083
+    GIT_SHALLOW    FALSE
+)
+FetchContent_MakeAvailable(stb)
+
 # Build Dear ImGui as a static library
 add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -51,6 +59,7 @@ set(SOURCES
     src/main.cpp
     src/core/Application.cpp
     src/core/Clock.cpp
+    src/core/Texture.cpp
     src/compositor/Compositor.cpp
     src/compositor/WindowManager.cpp
     src/shell/Desktop.cpp
@@ -63,7 +72,7 @@ set(SOURCES
 
 add_executable(csopesy ${SOURCES})
 
-target_include_directories(csopesy PRIVATE src)
+target_include_directories(csopesy PRIVATE src ${stb_SOURCE_DIR})
 target_link_libraries(csopesy PRIVATE imgui OpenGL::GL glfw)
 
 # Copy assets next to the executable
