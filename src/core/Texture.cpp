@@ -2,6 +2,7 @@
 #include "Texture.h"
 #include <stb_image.h>
 #include <GLFW/glfw3.h>
+#include <cstdio>
 
 #ifndef GL_CLAMP_TO_EDGE
 #define GL_CLAMP_TO_EDGE 0x812F
@@ -13,7 +14,10 @@ Texture loadTexture(const char* path) {
     Texture t;
     int channels;
     unsigned char* data = stbi_load(path, &t.w, &t.h, &channels, 4);
-    if (!data) return t;
+    if (!data) {
+        fprintf(stderr, "[Texture] Failed to load \"%s\": %s\n", path, stbi_failure_reason());
+        return t;
+    }
 
     glGenTextures(1, &t.id);
     glBindTexture(GL_TEXTURE_2D, t.id);

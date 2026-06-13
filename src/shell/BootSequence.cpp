@@ -72,16 +72,25 @@ void BootSequence::draw() {
         ImGui::SetCursorPos({cx, cy + 120});
         ImGui::TextColored({0.5f,0.5f,0.5f,1.0f}, "Press any key to skip...");
     } else if (state_ == State::Splash) {
-        // Large title rendered via font scaling — avoids dependency on Unicode
-        // block-drawing glyphs that most monospace fonts don't include.
-        ImGui::SetWindowFontScale(4.0f);
-        ImVec2 titleSz = ImGui::CalcTextSize("CSOPESY");
-        ImGui::SetCursorPos({(W - titleSz.x) * 0.5f, H * 0.30f});
-        ImGui::TextColored({0.3f, 0.8f, 1.0f, 1.0f}, "CSOPESY");
-        ImGui::SetWindowFontScale(1.0f);
+        const char* logo[] = {
+            " ██████╗███████╗ ██████╗ ██████╗ ███████╗███████╗██╗   ██╗",
+            "██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔════╝╚██╗ ██╔╝",
+            "██║     █████╗  ██║   ██║██████╔╝█████╗  ███████╗ ╚████╔╝ ",
+            "██║     ╚════██╗██║   ██║██╔═══╝ ██╔══╝  ╚════██║  ╚██╔╝  ",
+            "╚██████╗███████║╚██████╔╝██║     ███████╗███████║   ██║   ",
+            " ╚═════╝╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚══════╝   ╚═╝   ",
+        };
+        float lineH = 20.0f;
+        int lines = (int)(sizeof(logo)/sizeof(*logo));
+        float startY = H * 0.35f - lines * lineH * 0.5f;
+        for (int i = 0; i < lines; ++i) {
+            ImVec2 ts = ImGui::CalcTextSize(logo[i]);
+            ImGui::SetCursorPos({(W - ts.x) * 0.5f, startY + i * lineH});
+            ImGui::TextColored({0.3f, 0.8f, 1.0f, 1.0f}, "%s", logo[i]);
+        }
 
         ImVec2 ts2 = ImGui::CalcTextSize("Operating System Emulator  v1.0");
-        ImGui::SetCursorPos({(W - ts2.x) * 0.5f, H * 0.58f});
+        ImGui::SetCursorPos({(W - ts2.x) * 0.5f, H * 0.62f});
         ImGui::TextColored({0.6f,0.6f,0.6f,1.0f}, "Operating System Emulator  v1.0");
         ImVec2 ts3 = ImGui::CalcTextSize("Press any key to skip...");
         ImGui::SetCursorPos({(W - ts3.x) * 0.5f, H * 0.75f});

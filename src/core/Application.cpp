@@ -62,9 +62,16 @@ void Application::initImGui() {
     ImGui::StyleColorsDark();
     core::applyTheme();
 
+    // Extend glyph coverage to include box-drawing (U+2500–U+257F) and
+    // block-element (U+2580–U+259F) characters used in the boot splash logo.
+    static const ImWchar kGlyphRanges[] = {
+        0x0020, 0x00FF, // Basic Latin + Latin-1 Supplement
+        0x2500, 0x259F, // Box Drawing + Block Elements
+        0,
+    };
     ImGuiIO& io2 = ImGui::GetIO();
     if (ImFont* f = io2.Fonts->AddFontFromFileTTF(
-            "assets/fonts/LiberationMono-Bold.ttf", 15.0f))
+            "assets/fonts/LiberationMono-Bold.ttf", 15.0f, nullptr, kGlyphRanges))
         (void)f;
 
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
