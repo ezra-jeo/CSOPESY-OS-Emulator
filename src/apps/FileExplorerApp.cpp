@@ -13,7 +13,14 @@ static const char* kDirFiles[][8] = {
     { "Admin",        "Guest",         "DefaultUser", nullptr },   // Users
     { "tmp001.tmp",   "tmp002.tmp",    nullptr },                   // Temp
 };
-static const int kDirFileCounts[] = { 3, 3, 3, 3, 3, 2 };
+
+// Derive the file count from the nullptr terminator so the data has a single
+// source of truth.
+static int countFiles(const char** files) {
+    int n = 0;
+    while (files[n]) ++n;
+    return n;
+}
 
 FileExplorerApp::FileExplorerApp() : compositor::Window("File Explorer") {}
 
@@ -49,7 +56,7 @@ void FileExplorerApp::draw() {
     if (panelH < 1.0f) panelH = 1.0f;
 
     const char** files = kDirFiles[selectedDir_];
-    int count          = kDirFileCounts[selectedDir_];
+    int count          = countFiles(files);
 
     // Left: directory tree
     ImGui::BeginChild("##dirs", {140, panelH}, true);
@@ -61,7 +68,7 @@ void FileExplorerApp::draw() {
             selectedDir_  = i;
             selectedFile_ = -1;
             files  = kDirFiles[selectedDir_];
-            count  = kDirFileCounts[selectedDir_];
+            count  = countFiles(files);
         }
     }
     ImGui::EndChild();
