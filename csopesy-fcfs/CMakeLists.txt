@@ -19,16 +19,23 @@ add_executable(csopesy ${SOURCES})
 target_include_directories(csopesy PRIVATE include)
 
 # ── Threading ────────────────────────────────────────────────────────────────
-# MinGW on Windows ships in two thread-model variants:
-#   • win32  — std::mutex / std::condition_variable ARE NOT implemented → link error
-#   • posix  — full C++11 threading works correctly
-# The two lines below force CMake to use the POSIX/pthread model on MinGW.
-# If you still get "'mutex' is not a member of 'std'", reinstall MinGW-w64 and
-# choose the "-posix" thread model (e.g. from https://winlibs.com).
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+# MSVC has native Windows threading — std::thread works with no extra flags.
+# Asking CMake to prefer pthreads on MSVC can confuse find_package(Threads)
+# and break _beginthreadex inside <thread>, so we skip it there.
+# MinGW needs the POSIX thread model; win32-model MinGW won't compile <mutex>.
+if(NOT MSVC)
+    set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+    set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(csopesy PRIVATE Threads::Threads)
+
+if(MSVC)
+    # Use the dynamic multithreaded CRT (/MD, /MDd) which provides _beginthreadex.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+    # Encode source and execution as UTF-8 so the block-letter logo renders correctly.
+    target_compile_options(csopesy PRIVATE /utf-8)
+endif()
 
 if(MINGW)
     # -mthreads enables MinGW's Win32-safe thread-local storage for exceptions.
