@@ -34,7 +34,8 @@ if(MSVC)
     # Use the dynamic multithreaded CRT (/MD, /MDd) which provides _beginthreadex.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
     # Encode source and execution as UTF-8 so the block-letter logo renders correctly.
-    target_compile_options(csopesy PRIVATE /utf-8)
+    # /FS forces synchronous PDB writes so parallel cl.exe invocations don't race.
+    target_compile_options(csopesy PRIVATE /utf-8 /FS)
 endif()
 
 if(MINGW)
