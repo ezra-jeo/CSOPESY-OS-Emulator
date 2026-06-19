@@ -29,7 +29,6 @@
 // ── ANSI escape codes ─────────────────────────────────────────────────────────
 static const char* R  = "\033[0m";          // reset
 static const char* B  = "\033[1m";          // bold
-static const char* MG = "\033[38;5;71m";    // Mint green  (#5faf5f)
 static const char* LG = "\033[92m";         // bright green
 static const char* CY = "\033[96m";         // cyan
 static const char* WH = "\033[97m";         // bright white
@@ -52,79 +51,49 @@ std::string fmtTime(std::time_t t) {
     return buf;
 }
 
-// Pad a plain C-string to `width` visible characters (no ANSI inside s).
-std::string pad(const char* s, int width) {
-    std::string r(s);
-    if ((int)r.size() < width) r.append(width - r.size(), ' ');
-    return r;
-}
-
-// ── Linux Mint neofetch logo (13 lines) ───────────────────────────────────────
+// ── CSOPESY splash logo — exact strings from BootSequence.cpp (src/shell/) ───
 static const char* LOGO[] = {
-    "MMMMMMMMMMMMMMMMMMMmmds+.        ",
-    "MMm----::-://////////////oymNMd+`",
-    "MMd      /++                -sNMb`",
-    "MMNso/`  dMM    `.::-. .-::. .hMN`",
-    "ddddMMh  dMM   :hNMNMNhNMNMNh: NMm",
-    "    NMm  dMM  .NMN/-+MMM+-/NMN`dMM",
-    "    NMm  dMM  -MMm  `MMM   dMM.dMM",
-    "    NMm  dMM  -MMm  `MMM   dMM.dMM",
-    "    NMm  dMM  .mmd`  mmm.  dMM.dMM",
-    "    NMm  dMM`  ...`   ...  dMM.dMM",
-    "    NMm  MMMMmmmmmmmmmmmmmmMMM..mMM",
-    "    NMm  :hMMMMMMMMMMMMMMMMMd+  dMM",
-    "    ...  `    -/oNMMMMMNo-`  `  ...",
+    " ██████╗███████╗ ██████╗ ██████╗ ███████╗███████╗██╗   ██╗",
+    "██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔════╝╚██╗ ██╔╝",
+    "██║     █████╗  ██║   ██║██████╔╝█████╗  ███████╗ ╚████╔╝ ",
+    "██║     ╚════██╗██║   ██║██╔═══╝ ██╔══╝  ╚════██║  ╚██╔╝  ",
+    "╚██████╗███████║╚██████╔╝██║     ███████╗███████║   ██║   ",
+    " ╚═════╝╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚══════╝   ╚═╝   ",
     nullptr
 };
 
 void printBanner() {
     std::cout << "\033[2J\033[H"; // clear screen + cursor home
 
-    // Build info column at runtime (avoids static array + std::string-from-null pitfall)
+    // Print the CSOPESY logo centred, in the same cyan used by the ImGui splash.
+    for (int i = 0; LOGO[i]; ++i)
+        std::cout << "  " << CY << LOGO[i] << R << "\n";
+
+    std::cout << "\n";
+
+    // Subtitle line — matches "Operating System Emulator  v1.0" from BootSequence.cpp
+    std::cout << "  " << GR << "Operating System Emulator  v1.0" << R << "\n";
+    std::cout << "  " << GR << std::string(58, '-') << R << "\n";
+
+    // System info panel
     std::ostringstream cores, procs, exec;
     cores << Config::NUM_CORES;
     procs << Config::NUM_PROCESSES << " x " << Config::PRINTS_PER_PROCESS << " instructions";
     exec  << Config::EXEC_DELAY_MS << " ms / instruction";
 
-    // Each pair: { label (empty = special row), value }
-    using Row = std::pair<std::string, std::string>;
+    using Row = std::pair<const char*, std::string>;
     std::vector<Row> info = {
-        { "",          std::string(B) + WH + "CSOPESY OS  v1.0" + R },
-        { "__sep__",   ""                                            },
-        { "OS:      ", "CSOPESY OS v1.0"                            },
-        { "Shell:   ", "csosh 1.0"                                   },
-        { "Cores:   ", cores.str()                                   },
-        { "Procs:   ", procs.str()                                   },
-        { "Sched:   ", "FCFS (non-preemptive)"                       },
-        { "Delay:   ", exec.str()                                    },
-        { "Logs:    ", Config::OUTPUT_DIR                            },
+        { "OS       : ", "CSOPESY OS v1.0"           },
+        { "Shell    : ", "csosh 1.0"                  },
+        { "Cores    : ", cores.str()                  },
+        { "Processes: ", procs.str()                  },
+        { "Scheduler: ", "FCFS (non-preemptive)"      },
+        { "Exec delay: ", exec.str()                  },
+        { "Log dir  : ", Config::OUTPUT_DIR           },
     };
+    for (const auto& [label, value] : info)
+        std::cout << "  " << CY << label << R << value << "\n";
 
-    int logoRows = 0;
-    while (LOGO[logoRows]) ++logoRows;
-    int rows = std::max(logoRows, (int)info.size());
-
-    for (int i = 0; i < rows; ++i) {
-        // Logo column — fixed 38-char visible width
-        if (i < logoRows)
-            std::cout << "  " << MG << pad(LOGO[i], 38) << R;
-        else
-            std::cout << "  " << std::string(38, ' ');
-
-        // Info column
-        if (i < (int)info.size()) {
-            std::cout << "  ";
-            const auto& [label, value] = info[i];
-            if (label.empty()) {                    // title row
-                std::cout << value;                 // already has colour codes embedded
-            } else if (label == "__sep__") {        // separator
-                std::cout << GR << std::string(36, '-') << R;
-            } else {                                // normal labelled row
-                std::cout << CY << label << R << value;
-            }
-        }
-        std::cout << "\n";
-    }
     std::cout << "\n";
 }
 
