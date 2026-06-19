@@ -10,13 +10,18 @@
 #include <vector>
 #include <algorithm>
 
-// Enable ANSI VT100 on Windows 10+ consoles; no-op everywhere else.
+// Prepare a Windows console for UTF-8 + ANSI VT100 output; no-op everywhere else.
 #ifdef _WIN32
   #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
   #endif
   #include <windows.h>
   static void enableAnsi() {
+      // The logo and box-drawing chars are UTF-8 bytes. Without this the console
+      // decodes them as CP-850/437 and prints mojibake (ΓòöΓòÉ...). 65001 = CP_UTF8.
+      SetConsoleOutputCP(CP_UTF8);
+      SetConsoleCP(CP_UTF8);
+
       HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
       DWORD  m = 0;
       if (h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &m))
