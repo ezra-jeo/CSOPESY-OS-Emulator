@@ -1,0 +1,6 @@
+# Build output
+build/
+
+# Per-process logs and reports generated at runtime
+output/
+csopesy-log.txt
