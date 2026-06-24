@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <fstream>
 #include <ctime>
 
 // PCB (Process Control Block) — all state the OS needs to manage one process.
@@ -54,7 +53,7 @@ private:
     bool         sleepPending = false;
     std::uint8_t sleepTicks   = 0;
 
-    std::ofstream logFile;      // opened in constructor when ENABLE_FILE_LOGGING
-    std::time_t   startTime  = 0;
+    std::string  logPath;        // set in constructor; log() opens/appends/closes per call
+    std::time_t  startTime  = 0;
     std::time_t   finishTime = 0;
 };

@@ -1,15 +1,17 @@
 #include "Process.h"
 #include "Config.h"
 #include <filesystem>
+#include <fstream>
 
 Process::Process(int pid, std::string name)
     : pid(pid), name(std::move(name)), currentState(READY), commandCounter(0) {
     if (Config::ENABLE_FILE_LOGGING) {
         std::filesystem::create_directories(Config::OUTPUT_DIR);
-        std::string path = std::string(Config::OUTPUT_DIR) + "/" + this->name + ".txt";
-        logFile.open(path);
-        logFile << "Process name: " << this->name << "\n";
-        logFile << "Logs:\n\n";
+        logPath = std::string(Config::OUTPUT_DIR) + "/" + this->name + ".txt";
+        // Write header then close immediately — keeps fd count at O(1).
+        std::ofstream f(logPath, std::ios::trunc);
+        f << "Process name: " << this->name << "\n";
+        f << "Logs:\n\n";
     }
 }
 
@@ -51,10 +53,13 @@ int Process::getCommandCounter() const { return commandCounter; }
 int Process::getTotalCommands()  const { return (int)commandList.size(); }
 
 void Process::log(const std::string& line) {
-    // Non-preemptive FCFS: exactly one worker owns this process at a time,
-    // so writing to logFile here needs no mutex.
-    if (Config::ENABLE_FILE_LOGGING)
-        logFile << line << '\n';
+    // Open-append-close per call: keeps file-descriptor count at O(1) regardless
+    // of how many processes are alive. One worker owns the process at a time so
+    // no lock is needed.
+    if (Config::ENABLE_FILE_LOGGING && !logPath.empty()) {
+        std::ofstream f(logPath, std::ios::app);
+        f << line << '\n';
+    }
 }
 
 std::time_t Process::getStartTime()  const { return startTime; }

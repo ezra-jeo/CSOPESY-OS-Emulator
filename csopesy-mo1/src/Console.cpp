@@ -66,7 +66,7 @@ static const char* LOGO[] = {
     nullptr
 };
 
-void printBanner() {
+void printBanner(const std::string& status = "awaiting initialize") {
     std::cout << "\033[2J\033[H";
 
     for (int i = 0; LOGO[i]; ++i)
@@ -78,9 +78,9 @@ void printBanner() {
 
     using Row = std::pair<const char*, std::string>;
     std::vector<Row> info = {
-        { "OS    : ", "CSOPESY OS v1.0"      },
-        { "Shell : ", "csosh 1.0"            },
-        { "Status: ", "awaiting initialize"  },
+        { "OS    : ", "CSOPESY OS v1.0" },
+        { "Shell : ", "csosh 1.0"       },
+        { "Status: ", status            },
     };
     for (const auto& [label, value] : info)
         std::cout << "  " << CY << label << R << value << "\n";
@@ -213,6 +213,9 @@ void Console::cmdInitialize() {
     initialized = true;
 
     const char* policy = (config.scheduler == SystemConfig::Scheduler::FCFS) ? "FCFS" : "RR";
+    std::string statusLine = "initialized — "
+        + std::to_string(config.numCpu) + " core(s), scheduler=" + policy;
+    printBanner(statusLine);
     std::cout << GR << "  Initialized: " << R
               << config.numCpu << " core(s), scheduler=" << policy << "\n";
 }
