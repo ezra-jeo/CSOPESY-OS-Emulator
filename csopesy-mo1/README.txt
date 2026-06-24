@@ -17,15 +17,27 @@ What this is:
   full instruction set, screen multiplexer).
 
 Build:
-  cmake -S . -B build
-  cmake --build build --parallel
+  Linux / macOS:
+    cmake -S . -B build
+    cmake --build build --parallel
+
+  Windows (MinGW-w64 via MSYS2, POSIX threads):
+    cmake --preset mingw
+    cmake --build --preset mingw
+    (One-time: if a build/ dir already exists from a previous MSVC configure,
+     delete it first with  rmdir /s /q build  -- CMake caches the generator
+     per build dir and cannot switch MSVC -> MinGW in place.)
 
 Run:
   ./build/csopesy            (Linux / macOS)
-  build\Debug\csopesy.exe    (Windows / MSVC)
+  build\csopesy.exe          (Windows / MinGW -- "MinGW Makefiles" is a
+                              single-config generator, so the exe lands
+                              directly in build\, not build\Debug\)
 
 Requirements:
-  CMake >= 3.16, a C++20 compiler (GCC 11+ / Clang 13+ / MSVC 2022).
+  CMake >= 3.21 (for CMakePresets), a C++20 compiler (GCC 11+ / Clang 13+).
+  On Windows, MinGW-w64 with the POSIX thread model (e.g. MSYS2 ucrt64/mingw64);
+  the win32 thread model cannot compile <thread>/<mutex>.
 
 Configuration (config.txt, space-separated "key value" lines):
   num-cpu            number of CPU cores                  [1, 128]
