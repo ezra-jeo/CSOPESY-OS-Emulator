@@ -1,13 +1,18 @@
 #include "SleepCommand.h"
 #include "Process.h"
+#include "Config.h"
+#include <thread>
+#include <chrono>
 
 SleepCommand::SleepCommand(int pid, std::uint8_t ticks)
     : ICommand(pid, SLEEP), ticks(ticks) {}
 
 void SleepCommand::execute(Process& owner) {
-    // TODO(student): mark the process WAITING for `ticks` CPU ticks and relinquish the
-    //   core. Coordinate with the scheduler's tick counter so the process becomes READY
-    //   again after `ticks` have elapsed. A simple first pass may just busy-wait/sleep,
-    //   but the spec wants a real tick-based yield (important for round-robin).
+    // First-pass: busy-wait approximation — sleep the worker thread for
+    // ticks * EXEC_DELAY_MS milliseconds. The process stays bound to its core
+    // for the duration (no relinquish). A true tick-based CPU yield would
+    // require a scheduler waiting-list (not yet implemented).
     (void)owner;
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(static_cast<int>(ticks) * Config::EXEC_DELAY_MS));
 }

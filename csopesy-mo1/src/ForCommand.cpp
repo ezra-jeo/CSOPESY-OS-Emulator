@@ -5,8 +5,11 @@ ForCommand::ForCommand(int pid, std::vector<std::shared_ptr<ICommand>> body, int
     : ICommand(pid, FOR), body(std::move(body)), repeats(repeats) {}
 
 void ForCommand::execute(Process& owner) {
-    // TODO(student): run `body` `repeats` times by calling each sub-command's
-    //   execute(owner). Decide how this interacts with the process command counter and
-    //   per-instruction delay (delays-per-exec) so progress/preemption stay correct.
-    (void)owner;
+    // The FOR node itself counts as one line in the process command counter.
+    // Sub-instructions are executed inline here — they bring their own delays
+    // (PRINT's EXEC_DELAY_MS, SLEEP's tick sleep, etc.).
+    // Nesting cap (3 levels) is enforced at generation time, not here.
+    for (int r = 0; r < repeats; ++r)
+        for (auto& cmd : body)
+            cmd->execute(owner);
 }

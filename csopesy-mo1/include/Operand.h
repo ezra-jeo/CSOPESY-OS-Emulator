@@ -14,7 +14,5 @@ struct Operand {
     static Operand fromLiteral(std::uint16_t v) { return {true, v, {}}; }
     static Operand fromVar(std::string name)    { return {false, 0, std::move(name)}; }
 
-    // TODO(student): implement in a .cpp if you prefer — resolves this operand to a
-    // concrete value, auto-declaring missing variables as 0 via owner's SymbolTable.
     std::uint16_t resolve(Process& owner) const;
 };
