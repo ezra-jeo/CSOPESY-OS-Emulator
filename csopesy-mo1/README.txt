@@ -28,6 +28,20 @@ Build:
      delete it first with  rmdir /s /q build  -- CMake caches the generator
      per build dir and cannot switch MSVC -> MinGW in place.)
 
+    The preset pins the compiler to C:/msys64/ucrt64/bin/g++.exe so PATH order
+    can't pick a stray g++. If you installed MSYS2 somewhere else, edit that
+    path in CMakePresets.json.
+
+    Troubleshooting -- errors *inside* GCC's own headers, e.g.
+      bits/fstream.tcc: 'std::ios_base::openmode' has not been declared
+    mean g++ is pulling stale headers from a different toolchain. Check for a
+    polluted include path:
+      where.exe g++                 (more than one hit = a rogue g++)
+      echo $env:CPATH $env:CPLUS_INCLUDE_PATH $env:C_INCLUDE_PATH
+    Clear any *_INCLUDE_PATH / CPATH var that points outside C:\msys64, remove
+    any old MinGW from PATH, then delete build/ and reconfigure. Building from
+    the "MSYS2 UCRT64" shell (clean environment) sidesteps this entirely.
+
 Run:
   ./build/csopesy            (Linux / macOS)
   .\build\csopesy.exe        (Windows / MinGW -- "MinGW Makefiles" is a
