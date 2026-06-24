@@ -1,40 +1,62 @@
 #include "RRScheduler.h"
+#include "CPUWorker.h"
 
-// All bodies are stubs — implement the round-robin policy here. The FCFSScheduler.cpp
-// in this same project is the reference for thread setup, the CV-driven dispatch loop,
-// and clean shutdown; RR adds quantum accounting and tail-requeue on preemption.
-
-RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles)
-    : numCores(numCores), quantumCycles(quantumCycles) {}
-
-RRScheduler::~RRScheduler() {
-    // TODO(student): ensure stop() has run so threads are joined.
+RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec)
+    : numCores(numCores), quantumCycles(quantumCycles), delaysPerExec(delaysPerExec) {
+    workers.reserve(numCores);
+    for (int i = 0; i < numCores; ++i)
+        workers.push_back(std::make_unique<CPUWorker>(i, *this, quantumCycles, delaysPerExec));
 }
 
+RRScheduler::~RRScheduler() { stop(); }
+
 void RRScheduler::addProcess(std::shared_ptr<Process> p) {
-    // TODO(student): push onto readyQueue under queueMutex, then notify schedulerCv.
-    (void)p;
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        readyQueue.push(p);
+    }
+    schedulerCv.notify_one();
+}
+
+void RRScheduler::requeue(std::shared_ptr<Process> p) {
+    // Preemption path: process exhausted its quantum but is not finished.
+    // Push to the tail so every ready process gets a fair turn.
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        readyQueue.push(p);
+    }
+    schedulerCv.notify_one();
 }
 
 void RRScheduler::start() {
-    // TODO(student): set running=true, spawn worker threads, launch schedulerLoop().
+    running = true;
+    for (auto& w : workers) w->start();
+    schedulerThread = std::thread(&RRScheduler::schedulerLoop, this);
 }
 
 void RRScheduler::stop() {
-    // TODO(student): set running=false, wake all CVs, join scheduler + workers.
+    running = false;
+    schedulerCv.notify_all();
+    if (schedulerThread.joinable()) schedulerThread.join();
+    for (auto& w : workers) w->stop();
 }
 
 void RRScheduler::moveToFinished(std::shared_ptr<Process> p) {
-    // TODO(student): append to finishedList under finishedMutex.
-    (void)p;
+    std::lock_guard<std::mutex> lock(finishedMutex);
+    finishedList.push_back(p);
 }
 
 void RRScheduler::notifyScheduler() {
-    // TODO(student): notify schedulerCv so the dispatch loop re-evaluates.
+    schedulerCv.notify_one();
 }
 
 std::vector<std::shared_ptr<Process>> RRScheduler::getRunningProcesses() const {
-    return {}; // TODO(student)
+    std::vector<std::shared_ptr<Process>> result;
+    for (const auto& w : workers) {
+        auto p = w->getCurrentProcess();
+        if (p) result.push_back(p);
+    }
+    return result;
 }
 
 std::vector<std::shared_ptr<Process>> RRScheduler::getFinishedProcesses() const {
@@ -45,13 +67,33 @@ std::vector<std::shared_ptr<Process>> RRScheduler::getFinishedProcesses() const 
 int RRScheduler::getNumCores() const { return numCores; }
 
 int RRScheduler::getActiveCores() const {
-    return 0; // TODO(student): count cores currently running a process.
+    int count = 0;
+    for (const auto& w : workers) if (!w->isIdle()) ++count;
+    return count;
 }
 
 void RRScheduler::schedulerLoop() {
-    // TODO(student): the round-robin dispatch loop:
-    //   - dispatch the front of readyQueue to an idle core
-    //   - let it run for up to quantumCycles ticks
-    //   - on quantum expiry with work remaining, preempt and requeue at the tail
-    //   - on completion, moveToFinished()
+    while (true) {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        schedulerCv.wait(lock, [&] {
+            bool hasWork     = !readyQueue.empty();
+            bool hasFreeCore = false;
+            for (auto& w : workers)
+                if (w->isIdle()) { hasFreeCore = true; break; }
+            return (!running && !hasWork) || (hasWork && hasFreeCore);
+        });
+
+        if (!running && readyQueue.empty()) break;
+
+        CPUWorker* idle = nullptr;
+        for (auto& w : workers)
+            if (w->isIdle()) { idle = w.get(); break; }
+        if (!idle) continue; // spurious wake
+
+        auto proc = readyQueue.front();
+        readyQueue.pop();
+        lock.unlock();
+
+        idle->assign(proc);
+    }
 }

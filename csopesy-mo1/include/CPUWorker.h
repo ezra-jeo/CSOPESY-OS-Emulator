@@ -5,14 +5,20 @@
 #include <condition_variable>
 #include <atomic>
 #include <memory>
+#include <cstdint>
 
-class FCFSScheduler; // forward declaration — avoids circular include with FCFSScheduler.h
+class IScheduler; // forward declaration — avoids circular include with IScheduler.h
 
 // One CPUWorker represents one CPU core (lecture §4 – processor data structure).
 // The short-term scheduler hands ready processes to idle workers via assign().
+//
+// quantum=0      → run to completion (FCFS behaviour)
+// quantum=N>0    → execute N instructions then yield back via scheduler.requeue() (RR)
+// delaysPerExec  → extra ms sleep before each instruction (0 = no extra delay)
 class CPUWorker {
 public:
-    CPUWorker(int id, FCFSScheduler& scheduler);
+    CPUWorker(int id, IScheduler& scheduler,
+              std::uint32_t quantum, std::uint32_t delaysPerExec);
     ~CPUWorker();
 
     void start(); // launch the worker thread
@@ -26,11 +32,12 @@ public:
     std::shared_ptr<Process> getCurrentProcess() const; // snapshot for Console
 
 private:
-    // TODO(student): implement workerLoop() — see step-by-step comments in CPUWorker.cpp
     void workerLoop();
 
     int            id;
-    FCFSScheduler& scheduler; // back-pointer so the worker can report to the scheduler
+    IScheduler&    scheduler;
+    std::uint32_t  quantum;       // 0 = non-preemptive
+    std::uint32_t  delaysPerExec; // additional ms per instruction
 
     std::shared_ptr<Process>  currentProcess;
     std::atomic<bool>         running{false};

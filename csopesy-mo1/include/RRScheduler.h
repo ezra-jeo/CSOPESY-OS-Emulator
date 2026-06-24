@@ -1,4 +1,5 @@
 #pragma once
+#include "IScheduler.h"
 #include "Process.h"
 #include <queue>
 #include <vector>
@@ -7,43 +8,45 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+#include <cstdint>
 
-// Round-robin scheduler skeleton (MO1 `scheduler rr`). Mirrors FCFSScheduler's public
-// surface so Console can drive either policy. The key difference is preemption: a
-// running process is interrupted after `quantumCycles` CPU ticks and requeued at the
-// tail of the ready queue.
-//
-// NOTE: CPUWorker is currently bound to FCFSScheduler& by its constructor. To share the
-// worker pool you'll either (a) generalize CPUWorker over a scheduler interface, or
-// (b) give RR its own worker loop. Left as a design decision for the implementer.
-class RRScheduler {
+class CPUWorker; // forward declaration
+
+// Round-robin scheduler. Mirrors FCFSScheduler's structure; the key difference is
+// that workers are built with quantum=quantumCycles so they preempt after N instructions
+// and call back via requeue() to push the process to the tail of the ready queue.
+class RRScheduler : public IScheduler {
 public:
-    RRScheduler(int numCores, std::uint32_t quantumCycles);
-    ~RRScheduler();
+    RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec = 0);
+    ~RRScheduler() override;
 
-    void addProcess(std::shared_ptr<Process> p);
-    void start();
-    void stop();
+    void addProcess(std::shared_ptr<Process> p) override;
+    void requeue(std::shared_ptr<Process> p)    override; // push to tail (preemption path)
+    void start() override;
+    void stop()  override;
 
-    void moveToFinished(std::shared_ptr<Process> p);
-    void notifyScheduler();
+    void moveToFinished(std::shared_ptr<Process> p) override;
+    void notifyScheduler()                          override;
 
-    std::vector<std::shared_ptr<Process>> getRunningProcesses()  const;
-    std::vector<std::shared_ptr<Process>> getFinishedProcesses() const;
-    int getNumCores()    const;
-    int getActiveCores() const;
+    std::vector<std::shared_ptr<Process>> getRunningProcesses()  const override;
+    std::vector<std::shared_ptr<Process>> getFinishedProcesses() const override;
+    int getNumCores()    const override;
+    int getActiveCores() const override;
 
 private:
-    void schedulerLoop(); // TODO(student): dispatch + quantum-based preemption + requeue
+    void schedulerLoop();
 
     int           numCores;
     std::uint32_t quantumCycles;
+    std::uint32_t delaysPerExec;
 
     std::queue<std::shared_ptr<Process>> readyQueue;
     mutable std::mutex                   queueMutex;
     std::condition_variable              schedulerCv;
 
     std::atomic<bool> running{false};
+
+    std::vector<std::unique_ptr<CPUWorker>> workers;
 
     std::vector<std::shared_ptr<Process>> finishedList;
     mutable std::mutex                    finishedMutex;

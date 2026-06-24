@@ -1,10 +1,11 @@
 #include "FCFSScheduler.h"
 #include "CPUWorker.h"
 
-FCFSScheduler::FCFSScheduler(int numCores) : numCores(numCores) {
+FCFSScheduler::FCFSScheduler(int numCores, std::uint32_t delaysPerExec)
+    : numCores(numCores), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)
-        workers.push_back(std::make_unique<CPUWorker>(i, *this));
+        workers.push_back(std::make_unique<CPUWorker>(i, *this, /*quantum=*/0, delaysPerExec));
 }
 
 FCFSScheduler::~FCFSScheduler() { stop(); }
@@ -15,6 +16,12 @@ void FCFSScheduler::addProcess(std::shared_ptr<Process> p) {
         readyQueue.push(p);
     }
     schedulerCv.notify_one();
+}
+
+void FCFSScheduler::requeue(std::shared_ptr<Process> p) {
+    // quantum=0 means workers run to completion, so this is never called in practice.
+    // Provided for IScheduler conformance.
+    addProcess(p);
 }
 
 void FCFSScheduler::start() {
@@ -63,7 +70,7 @@ int FCFSScheduler::getActiveCores() const {
 
 void FCFSScheduler::schedulerLoop() {
     while (true) {
-        // STEP 1: wait until there is work AND a free core, or until shutdown
+        // Wait until there is work AND a free core, or until shutdown with empty queue.
         std::unique_lock<std::mutex> lock(queueMutex);
         schedulerCv.wait(lock, [&] {
             bool hasWork     = !readyQueue.empty();
@@ -73,23 +80,19 @@ void FCFSScheduler::schedulerLoop() {
             return (!running && !hasWork) || (hasWork && hasFreeCore);
         });
 
-        // STEP 2: exit when told to stop and nothing remains
         if (!running && readyQueue.empty()) break;
 
-        // STEP 3: find first idle worker
+        // Find first idle worker
         CPUWorker* idle = nullptr;
         for (auto& w : workers)
             if (w->isIdle()) { idle = w.get(); break; }
         if (!idle) continue; // spurious wake
 
-        // STEP 4: pop the front — FCFS means arrival order, never sorted
+        // Pop the front — FCFS means arrival order, never sorted
         auto proc = readyQueue.front();
         readyQueue.pop();
+        lock.unlock(); // release before assign() to avoid holding two locks at once
 
-        // STEP 5: release lock before assign() to avoid holding two locks at once
-        lock.unlock();
-
-        // STEP 6: dispatch
         idle->assign(proc);
     }
 }

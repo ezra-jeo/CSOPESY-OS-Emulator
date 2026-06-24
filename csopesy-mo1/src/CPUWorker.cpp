@@ -1,8 +1,11 @@
 #include "CPUWorker.h"
-#include "FCFSScheduler.h"
+#include "IScheduler.h"
+#include <chrono>
+#include <thread>
 
-CPUWorker::CPUWorker(int id, FCFSScheduler& scheduler)
-    : id(id), scheduler(scheduler) {}
+CPUWorker::CPUWorker(int id, IScheduler& scheduler,
+                     std::uint32_t quantum, std::uint32_t delaysPerExec)
+    : id(id), scheduler(scheduler), quantum(quantum), delaysPerExec(delaysPerExec) {}
 
 CPUWorker::~CPUWorker() { stop(); }
 
@@ -51,26 +54,39 @@ void CPUWorker::workerLoop() {
         proc->setCoreId(id);
         proc->setState(Process::RUNNING);
 
-        // STEP 5: non-preemptive — run every instruction before yielding
+        // STEP 5: execute up to `quantum` instructions (0 = run to completion)
+        std::uint32_t executed = 0;
         while (!proc->isFinished()) {
+            if (quantum > 0 && executed >= quantum) break; // quantum expired
+
+            // Extra delay before each instruction (config delays-per-exec; 0 = none).
+            // Note: PrintCommand also has its own seed delay via Config::EXEC_DELAY_MS.
+            if (delaysPerExec > 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(delaysPerExec));
+
             proc->executeCurrentCommand();
             proc->moveToNextLine();
+            ++executed;
         }
 
-        // STEP 6: mark finished
-        proc->setState(Process::FINISHED);
+        // STEP 6: finished vs. quantum-expired (preempted)
+        if (proc->isFinished()) {
+            proc->setState(Process::FINISHED);
+            scheduler.moveToFinished(proc);
+        } else {
+            // Quantum expired with work remaining — requeue at the tail (RR preemption).
+            proc->setState(Process::READY);
+            scheduler.requeue(proc);
+        }
 
-        // STEP 7: hand off to finished list
-        scheduler.moveToFinished(proc);
-
-        // STEP 8: clear slot and become idle
+        // STEP 7: clear slot and become idle
         {
             std::lock_guard<std::mutex> lg(mtx);
             currentProcess = nullptr;
         }
         idle = true;
 
-        // STEP 9: wake the scheduler so it can dispatch the next process
+        // STEP 8: wake the scheduler so it can dispatch the next process
         scheduler.notifyScheduler();
     }
 }

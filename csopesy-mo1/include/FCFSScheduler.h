@@ -1,4 +1,5 @@
 #pragma once
+#include "IScheduler.h"
 #include "Process.h"
 #include <queue>
 #include <vector>
@@ -7,42 +8,37 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+#include <cstdint>
 
 class CPUWorker; // forward declaration — avoids circular include with CPUWorker.h
 
 // Combines the long-term scheduler (admits processes into the ready queue) and
 // the short-term scheduler (dispatches the front of the FCFS queue to idle cores).
 // Ready queue = FIFO; arrival order is preserved by always pushing to the back.
-class FCFSScheduler {
+class FCFSScheduler : public IScheduler {
 public:
-    explicit FCFSScheduler(int numCores);
-    ~FCFSScheduler();
+    FCFSScheduler(int numCores, std::uint32_t delaysPerExec = 0);
+    ~FCFSScheduler() override;
 
-    // Long-term admission: enqueue a newly created process (call before start()).
-    void addProcess(std::shared_ptr<Process> p);
+    void addProcess(std::shared_ptr<Process> p) override;
+    void requeue(std::shared_ptr<Process> p)    override; // same as addProcess for FCFS
+    void start() override;
+    void stop()  override;
 
-    void start(); // launch scheduler thread + all worker threads
-    void stop();  // signal shutdown, drain, join all threads
+    void moveToFinished(std::shared_ptr<Process> p) override;
+    void notifyScheduler()                          override;
 
-    // Called by a worker when it finishes executing all commands of a process.
-    void moveToFinished(std::shared_ptr<Process> p);
-
-    // Called by a worker when it becomes idle so the scheduler loop can wake up.
-    void notifyScheduler();
-
-    // Read-only snapshots for Console::printProcessList() — each acquires its lock.
-    std::vector<std::shared_ptr<Process>> getRunningProcesses()  const;
-    std::vector<std::shared_ptr<Process>> getFinishedProcesses() const;
-    int getNumCores()    const;
-    int getActiveCores() const; // number of cores currently executing a process
+    std::vector<std::shared_ptr<Process>> getRunningProcesses()  const override;
+    std::vector<std::shared_ptr<Process>> getFinishedProcesses() const override;
+    int getNumCores()    const override;
+    int getActiveCores() const override;
 
 private:
-    // TODO(student): implement schedulerLoop() — see step-by-step comments in FCFSScheduler.cpp
     void schedulerLoop();
 
-    int numCores;
+    int           numCores;
+    std::uint32_t delaysPerExec;
 
-    // Ready queue (lecture §4 – FCFS = FIFO; do NOT sort, do NOT reorder).
     std::queue<std::shared_ptr<Process>> readyQueue;
     mutable std::mutex                   queueMutex;
     std::condition_variable              schedulerCv;

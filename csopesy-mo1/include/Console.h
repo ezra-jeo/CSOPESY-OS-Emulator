@@ -1,20 +1,30 @@
 #pragma once
-#include "FCFSScheduler.h"
+#include "IScheduler.h"
 #include "SystemConfig.h"
+#include "ProcessGenerator.h"
+#include "Process.h"
 #include <string>
 #include <vector>
+#include <memory>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <unordered_map>
+#include <iosfwd>
 
 // MO1 main-menu CLI running on the main thread.
 //
-// Recognised commands (see handlers below):
+// Recognised commands:
 //   initialize | screen -s|-r|-ls | scheduler-start | scheduler-stop |
 //   report-util | exit
 //
-// The seed only handled "screen -ls" and "exit"; the extra handlers are MO1 stubs for
-// the implementer to fill in.
+// Console owns the scheduler (built at initialize time), the process generator,
+// and the batch-generation thread. All post-init handlers are gated behind the
+// `initialized` flag per the spec.
 class Console {
 public:
-    explicit Console(FCFSScheduler& scheduler);
+    Console();
+    ~Console();
 
     // Blocks, reading stdin line by line, until the user types "exit".
     void run();
@@ -26,21 +36,27 @@ private:
     // Dispatches one tokenized command. Returns false when the console should exit.
     bool dispatch(const std::vector<std::string>& args);
 
-    // ── Command handlers (MO1) ────────────────────────────────────────────────
-    void cmdInitialize();                                   // load + validate config.txt
-    void cmdScreen(const std::vector<std::string>& args);   // -s <name> | -r <name> | -ls
-    void cmdSchedulerStart();                               // begin batch generation
-    void cmdSchedulerStop();                                // stop batch generation
-    void cmdReportUtil();                                   // write csopesy-log.txt
+    // ── Command handlers ──────────────────────────────────────────────────────
+    void cmdInitialize();
+    void cmdScreen(const std::vector<std::string>& args);
+    void cmdSchedulerStart();
+    void cmdSchedulerStop();
+    void cmdReportUtil();
 
     // ── screen sub-views ──────────────────────────────────────────────────────
-    void screenSession(const std::string& name, bool resume); // attached sub-prompt loop
-    void printProcessList() const;                          // screen -ls (seed: works)
+    void screenSession(const std::string& name, bool resume);
+    void printProcessList(std::ostream& os, bool color) const;
 
-    FCFSScheduler& scheduler;
-
-    // Set true once `initialize` has loaded a valid config.txt. Gate every other
-    // command behind this per the spec.
+    // ── State ─────────────────────────────────────────────────────────────────
     bool         initialized = false;
     SystemConfig config;
+
+    std::unique_ptr<IScheduler>       scheduler;
+    std::unique_ptr<ProcessGenerator> generator;
+
+    std::atomic<bool> generating{false};
+    std::thread       genThread;
+
+    mutable std::mutex                                        registryMutex;
+    std::unordered_map<std::string, std::shared_ptr<Process>> registry;
 };
