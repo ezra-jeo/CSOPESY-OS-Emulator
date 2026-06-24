@@ -2,6 +2,7 @@
 #include "Process.h"
 #include <memory>
 #include <vector>
+#include <cstdint>
 
 // Abstract scheduler interface shared by FCFSScheduler and RRScheduler.
 // CPUWorker holds an IScheduler& so it can call back without knowing the policy.
@@ -24,6 +25,11 @@ public:
 
     // Called by a worker when it becomes idle so the scheduler loop can wake up.
     virtual void notifyScheduler() = 0;
+
+    // Waiting-list support: worker calls these to yield the core for a sleeping process.
+    virtual void          addToWaiting(std::shared_ptr<Process> p, std::uint64_t wakeAtTick) = 0;
+    virtual void          incrementTick()     = 0;
+    virtual std::uint64_t getCpuTick() const  = 0;
 
     virtual std::vector<std::shared_ptr<Process>> getRunningProcesses()  const = 0;
     virtual std::vector<std::shared_ptr<Process>> getFinishedProcesses() const = 0;

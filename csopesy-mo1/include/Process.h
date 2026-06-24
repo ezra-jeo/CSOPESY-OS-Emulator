@@ -37,6 +37,12 @@ public:
     std::time_t getStartTime()     const;   // set when state transitions to RUNNING
     std::time_t getFinishTime()    const;   // set when state transitions to FINISHED
 
+    // Sleep-request flag: SleepCommand sets it; CPUWorker reads+clears it to yield the core.
+    void          requestSleep(std::uint8_t ticks);
+    bool          hasSleepRequest() const;
+    std::uint8_t  getSleepTicks()   const;
+    void          clearSleepRequest();
+
 private:
     int          pid;
     std::string  name;
@@ -45,6 +51,8 @@ private:
     std::vector<std::shared_ptr<ICommand>> commandList;
     SymbolTable  symbolTable;
     int          coreId = -1;
+    bool         sleepPending = false;
+    std::uint8_t sleepTicks   = 0;
 
     std::ofstream logFile;      // opened in constructor when ENABLE_FILE_LOGGING
     std::time_t   startTime  = 0;

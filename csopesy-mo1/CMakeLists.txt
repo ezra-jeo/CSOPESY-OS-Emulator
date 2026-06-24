@@ -11,6 +11,7 @@ set(SOURCES
     src/Process.cpp
     src/PrintCommand.cpp
     src/CPUWorker.cpp
+    src/SchedulerBase.cpp
     src/FCFSScheduler.cpp
     src/Console.cpp
     # ── MO1 additions (scaffold / to be implemented) ─────────────────────────

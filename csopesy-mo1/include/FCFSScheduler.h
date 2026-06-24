@@ -1,5 +1,5 @@
 #pragma once
-#include "IScheduler.h"
+#include "SchedulerBase.h"
 #include "Process.h"
 #include <queue>
 #include <vector>
@@ -15,7 +15,7 @@ class CPUWorker; // forward declaration — avoids circular include with CPUWork
 // Combines the long-term scheduler (admits processes into the ready queue) and
 // the short-term scheduler (dispatches the front of the FCFS queue to idle cores).
 // Ready queue = FIFO; arrival order is preserved by always pushing to the back.
-class FCFSScheduler : public IScheduler {
+class FCFSScheduler : public SchedulerBase {
 public:
     FCFSScheduler(int numCores, std::uint32_t delaysPerExec = 0);
     ~FCFSScheduler() override;
@@ -32,6 +32,8 @@ public:
     std::vector<std::shared_ptr<Process>> getFinishedProcesses() const override;
     int getNumCores()    const override;
     int getActiveCores() const override;
+
+    void requeueReady(std::shared_ptr<Process> p) override; // SchedulerBase hook
 
 private:
     void schedulerLoop();

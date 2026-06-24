@@ -1,5 +1,5 @@
 #pragma once
-#include "IScheduler.h"
+#include "SchedulerBase.h"
 #include "Process.h"
 #include <queue>
 #include <vector>
@@ -15,7 +15,7 @@ class CPUWorker; // forward declaration
 // Round-robin scheduler. Mirrors FCFSScheduler's structure; the key difference is
 // that workers are built with quantum=quantumCycles so they preempt after N instructions
 // and call back via requeue() to push the process to the tail of the ready queue.
-class RRScheduler : public IScheduler {
+class RRScheduler : public SchedulerBase {
 public:
     RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec = 0);
     ~RRScheduler() override;
@@ -32,6 +32,8 @@ public:
     std::vector<std::shared_ptr<Process>> getFinishedProcesses() const override;
     int getNumCores()    const override;
     int getActiveCores() const override;
+
+    void requeueReady(std::shared_ptr<Process> p) override; // SchedulerBase hook
 
 private:
     void schedulerLoop();

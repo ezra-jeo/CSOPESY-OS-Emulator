@@ -56,6 +56,7 @@ void CPUWorker::workerLoop() {
 
         // STEP 5: execute up to `quantum` instructions (0 = run to completion)
         std::uint32_t executed = 0;
+        bool yielded = false;
         while (!proc->isFinished()) {
             if (quantum > 0 && executed >= quantum) break; // quantum expired
 
@@ -66,11 +67,25 @@ void CPUWorker::workerLoop() {
 
             proc->executeCurrentCommand();
             proc->moveToNextLine();
+            scheduler.incrementTick();
             ++executed;
+
+            // SleepCommand sets a pending sleep request instead of blocking the thread.
+            // We handle it here so the core is freed while the process waits.
+            if (proc->hasSleepRequest()) {
+                std::uint64_t wakeAt = scheduler.getCpuTick() + proc->getSleepTicks();
+                proc->clearSleepRequest();
+                proc->setState(Process::WAITING);
+                scheduler.addToWaiting(proc, wakeAt);
+                yielded = true;
+                break;
+            }
         }
 
-        // STEP 6: finished vs. quantum-expired (preempted)
-        if (proc->isFinished()) {
+        // STEP 6: finished vs. quantum-expired (preempted) vs. yielded for sleep
+        if (yielded) {
+            // Nothing to do — watcher thread re-admits via requeueReady when tick expires.
+        } else if (proc->isFinished()) {
             proc->setState(Process::FINISHED);
             scheduler.moveToFinished(proc);
         } else {

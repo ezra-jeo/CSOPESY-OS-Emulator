@@ -19,11 +19,18 @@ void RRScheduler::addProcess(std::shared_ptr<Process> p) {
 }
 
 void RRScheduler::requeue(std::shared_ptr<Process> p) {
-    // Preemption path: process exhausted its quantum but is not finished.
-    // Push to the tail so every ready process gets a fair turn.
+    // Preemption path: push to tail so every ready process gets a fair turn.
     {
         std::lock_guard<std::mutex> lock(queueMutex);
-        readyQueue.push(p);
+        readyQueue.push(std::move(p));
+    }
+    schedulerCv.notify_one();
+}
+
+void RRScheduler::requeueReady(std::shared_ptr<Process> p) {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        readyQueue.push(std::move(p));
     }
     schedulerCv.notify_one();
 }
@@ -32,9 +39,11 @@ void RRScheduler::start() {
     running = true;
     for (auto& w : workers) w->start();
     schedulerThread = std::thread(&RRScheduler::schedulerLoop, this);
+    startWatcher();
 }
 
 void RRScheduler::stop() {
+    stopWatcher();
     running = false;
     schedulerCv.notify_all();
     if (schedulerThread.joinable()) schedulerThread.join();

@@ -19,18 +19,26 @@ void FCFSScheduler::addProcess(std::shared_ptr<Process> p) {
 }
 
 void FCFSScheduler::requeue(std::shared_ptr<Process> p) {
-    // quantum=0 means workers run to completion, so this is never called in practice.
-    // Provided for IScheduler conformance.
     addProcess(p);
+}
+
+void FCFSScheduler::requeueReady(std::shared_ptr<Process> p) {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        readyQueue.push(std::move(p));
+    }
+    schedulerCv.notify_one();
 }
 
 void FCFSScheduler::start() {
     running = true;
     for (auto& w : workers) w->start();
     schedulerThread = std::thread(&FCFSScheduler::schedulerLoop, this);
+    startWatcher();
 }
 
 void FCFSScheduler::stop() {
+    stopWatcher();
     running = false;
     schedulerCv.notify_all();
     if (schedulerThread.joinable()) schedulerThread.join();

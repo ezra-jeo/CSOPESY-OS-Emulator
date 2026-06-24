@@ -59,3 +59,8 @@ void Process::log(const std::string& line) {
 
 std::time_t Process::getStartTime()  const { return startTime; }
 std::time_t Process::getFinishTime() const { return finishTime; }
+
+void Process::requestSleep(std::uint8_t ticks) { sleepPending = true; sleepTicks = ticks; }
+bool Process::hasSleepRequest() const          { return sleepPending; }
+std::uint8_t Process::getSleepTicks()   const  { return sleepTicks; }
+void Process::clearSleepRequest()              { sleepPending = false; sleepTicks = 0; }
