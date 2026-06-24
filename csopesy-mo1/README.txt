@@ -30,9 +30,11 @@ Build:
 
 Run:
   ./build/csopesy            (Linux / macOS)
-  build\csopesy.exe          (Windows / MinGW -- "MinGW Makefiles" is a
+  .\build\csopesy.exe        (Windows / MinGW -- "MinGW Makefiles" is a
                               single-config generator, so the exe lands
-                              directly in build\, not build\Debug\)
+                              directly in build\, not build\Debug\.
+                              Keep the leading .\  -- PowerShell will not
+                              run a bare relative path like build\csopesy.exe)
 
 Requirements:
   CMake >= 3.21 (for CMakePresets), a C++20 compiler (GCC 11+ / Clang 13+).
