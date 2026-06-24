@@ -1,25 +1,88 @@
 #include "SystemConfig.h"
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
 
 bool SystemConfig::load(const std::string& path, std::string& err) {
-    // TODO(student): open `path`, parse each `key value` line, and assign into the
-    //   fields below. Recognise: num-cpu, scheduler (fcfs|rr), quantum-cycles,
-    //   batch-process-freq, min-ins, max-ins, delays-per-exec. Reject unknown keys and
-    //   non-numeric values. Then call validate(err) and return its result.
-    (void)path;
-    err = "SystemConfig::load not implemented yet";
-    return false;
+    const std::unordered_map<std::string, Scheduler> schedulerMap = {
+        {"fcfs", Scheduler::FCFS},
+        {"rr",   Scheduler::RR}
+    };
+
+    const std::unordered_map<std::string, uint32_t*> numericFields = {
+        {"quantum-cycles",     &quantumCycles},
+        {"batch-process-freq", &batchProcessFreq},
+        {"min-ins",            &minIns},
+        {"max-ins",            &maxIns},
+        {"delays-per-exec",    &delaysPerExec},
+    };
+
+    std::ifstream file(path);
+    if (!file) {
+        err = "Cannot open config file: " + path;
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+
+        std::istringstream ss(line);
+        std::string key, value;
+        if (!(ss >> key >> value)) continue;
+
+        try {
+            if (key == "scheduler") {
+                auto it = schedulerMap.find(value);
+                if (it == schedulerMap.end()) {
+                    err = "Unknown scheduler '" + value + "': expected fcfs or rr";
+                    return false;
+                }
+                scheduler = it->second;
+            } else if (key == "num-cpu") {
+                numCpu = static_cast<std::int32_t>(std::stoi(value));
+            } else {
+                auto it = numericFields.find(key);
+                if (it == numericFields.end()) {
+                    err = "Unknown config key: " + key;
+                    return false;
+                }
+                *it->second = static_cast<uint32_t>(std::stoul(value));
+            }
+        } catch (const std::exception&) {
+            err = "Invalid value for '" + key + "': " + value;
+            return false;
+        }
+    }
+
+    return validate(err);
 }
 
 bool SystemConfig::validate(std::string& err) const {
-    // TODO(student): enforce ranges and return false with a clear message on the first
-    //   violation. Required checks:
-    //     numCpu            in [1, 128]
-    //     quantumCycles     in [1, 2^32-1]
-    //     batchProcessFreq  in [1, 2^32-1]
-    //     minIns            in [1, 2^32-1]
-    //     maxIns            in [1, 2^32-1] AND maxIns >= minIns
-    //     delaysPerExec     in [0, 2^32-1]
-    //   (scheduler is already constrained by the enum once parsed.)
-    (void)err;
+    if (numCpu < 1 || numCpu > 128) {
+        err = "num-cpu must be in [1, 128], got " + std::to_string(numCpu);
+        return false;
+    }
+    if (quantumCycles < 1) {
+        err = "quantum-cycles must be >= 1";
+        return false;
+    }
+    if (batchProcessFreq < 1) {
+        err = "batch-process-freq must be >= 1";
+        return false;
+    }
+    if (minIns < 1) {
+        err = "min-ins must be >= 1";
+        return false;
+    }
+    if (maxIns < 1) {
+        err = "max-ins must be >= 1";
+        return false;
+    }
+    if (maxIns < minIns) {
+        err = "max-ins (" + std::to_string(maxIns) + ") must be >= min-ins (" + std::to_string(minIns) + ")";
+        return false;
+    }
+    // delaysPerExec: [0, 2^32-1] is the full uint32_t range, no check needed
     return true;
 }

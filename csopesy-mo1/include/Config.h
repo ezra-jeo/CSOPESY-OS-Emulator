@@ -1,7 +1,6 @@
 #pragma once
 
 // All compile-time constants for Phase 1.
-// Do NOT read from config.txt this phase — values live here only.
 namespace Config {
     constexpr int  NUM_CORES           = 4;
     constexpr int  NUM_PROCESSES       = 10;

@@ -3,6 +3,7 @@ project(csopesy-mo1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SOURCES
     src/main.cpp
@@ -26,8 +27,14 @@ set(SOURCES
 
 add_executable(csopesy ${SOURCES})
 
-# Let source files use bare #include "FileName.h" (no path prefix).
-target_include_directories(csopesy PRIVATE include)
+# Use -iquote instead of -I so our include/ dir is only searched for quote-style
+# includes (#include "Foo.h"). This prevents MinGW's pthread.h from resolving
+# its #include <process.h> to our Process.h on the case-insensitive Windows FS.
+if(MSVC)
+    target_include_directories(csopesy PRIVATE include)
+else()
+    target_compile_options(csopesy PRIVATE "-iquote${CMAKE_CURRENT_SOURCE_DIR}/include")
+endif()
 
 # ── Threading ────────────────────────────────────────────────────────────────
 # MSVC has native Windows threading — std::thread works with no extra flags.

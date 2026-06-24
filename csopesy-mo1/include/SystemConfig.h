@@ -18,7 +18,7 @@ struct SystemConfig {
     enum class Scheduler { FCFS, RR };
 
     // Defaults are placeholders; load() overwrites them from config.txt.
-    int           numCpu          = 4;       // [1, 128]
+    std::int32_t  numCpu          = 4;       // [1, 128]
     Scheduler     scheduler       = Scheduler::FCFS;
     std::uint32_t quantumCycles   = 1;       // [1, 2^32-1]; RR only
     std::uint32_t batchProcessFreq = 1;      // [1, 2^32-1]

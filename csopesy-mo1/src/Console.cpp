@@ -176,10 +176,15 @@ bool Console::dispatch(const std::vector<std::string>& args) {
     // TODO(student): once cmdInitialize() is implemented, gate the handlers below on
     //   `initialized` and print a "run initialize first" message when it is false.
 
-    if (cmd == "screen")          { cmdScreen(args);     return true; }
-    if (cmd == "scheduler-start") { cmdSchedulerStart(); return true; }
-    if (cmd == "scheduler-stop")  { cmdSchedulerStop();  return true; }
-    if (cmd == "report-util")     { cmdReportUtil();     return true; }
+    if (initialized) {
+        if (cmd == "screen")          { cmdScreen(args);     return true; }
+        if (cmd == "scheduler-start") { cmdSchedulerStart(); return true; }
+        if (cmd == "scheduler-stop")  { cmdSchedulerStop();  return true; }
+        if (cmd == "report-util")     { cmdReportUtil();     return true; }
+    } else {
+        std::cout << GR << "error: " << R
+              << "run initialize first" << "\n";
+    }
 
     std::cout << GR << "csosh: " << R
               << "command not found: " << YL << cmd << R << "\n";
@@ -195,6 +200,8 @@ void Console::cmdInitialize() {
     std::string err;
     if (config.load("config.txt", err)) {
         initialized = true;
+
+        
         std::cout << GR << "  Initialized from config.txt.\n" << R;
     } else {
         std::cout << YL << "  initialize failed: " << R << err << "\n";
