@@ -200,7 +200,7 @@ void Console::cmdInitialize() {
     }
 
     std::string err;
-    if (!config.load("./testcases/tc1_config.txt", err)) {
+    if (!config.load("config.txt", err)) {
         std::cout << YL << "  initialize failed: " << R << err << "\n";
         return;
     }
