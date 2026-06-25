@@ -31,8 +31,6 @@ public:
     int  getCoreId()               const;
     int  getCommandCounter()       const;   // for "X / 100" progress in screen -ls
     int  getTotalCommands()        const;   // commandList.size()
-    void log(const std::string& line);      // appends to output/<name>.txt
-
     std::time_t getStartTime()     const;   // set when state transitions to RUNNING
     std::time_t getFinishTime()    const;   // set when state transitions to FINISHED
 
@@ -53,7 +51,6 @@ private:
     bool         sleepPending = false;
     std::uint8_t sleepTicks   = 0;
 
-    std::string  logPath;        // set in constructor; log() opens/appends/closes per call
     std::time_t  startTime  = 0;
     std::time_t   finishTime = 0;
 };

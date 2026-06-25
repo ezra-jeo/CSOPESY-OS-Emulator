@@ -6,7 +6,5 @@ namespace Config {
     constexpr int  NUM_PROCESSES       = 10;
     constexpr int  PRINTS_PER_PROCESS  = 100;
     constexpr int  EXEC_DELAY_MS       = 100;  // per-instruction delay makes the run observable
-    constexpr bool ENABLE_FILE_LOGGING = true;
-    constexpr const char* OUTPUT_DIR   = "output";
-    constexpr const char* NAME_PREFIX  = "process_";
+constexpr const char* NAME_PREFIX  = "process_";
 }

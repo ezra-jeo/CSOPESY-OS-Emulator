@@ -1,5 +1,4 @@
 #include "Console.h"
-#include "Config.h"
 #include "FCFSScheduler.h"
 #include "RRScheduler.h"
 #include <iostream>
@@ -67,7 +66,11 @@ static const char* LOGO[] = {
 };
 
 void printBanner(const std::string& status = "awaiting initialize") {
-    std::cout << "\033[2J\033[H";
+#ifdef _WIN32
+    system("cls");
+#else
+    std::cout << "\033[2J\033[H" << std::flush;
+#endif
 
     for (int i = 0; LOGO[i]; ++i)
         std::cout << "  " << CY << LOGO[i] << R << "\n";
@@ -197,7 +200,7 @@ void Console::cmdInitialize() {
     }
 
     std::string err;
-    if (!config.load("config.txt", err)) {
+    if (!config.load("./testcases/tc1_config.txt", err)) {
         std::cout << YL << "  initialize failed: " << R << err << "\n";
         return;
     }
@@ -216,8 +219,6 @@ void Console::cmdInitialize() {
     std::string statusLine = "initialized — "
         + std::to_string(config.numCpu) + " core(s), scheduler=" + policy;
     printBanner(statusLine);
-    std::cout << GR << "  Initialized: " << R
-              << config.numCpu << " core(s), scheduler=" << policy << "\n";
 }
 
 void Console::cmdScreen(const std::vector<std::string>& args) {
@@ -308,21 +309,6 @@ void Console::screenSession(const std::string& name, bool resume) {
         std::cout << "\033[2J\033[H"; // clear screen
         std::cout << B << WH << "Process name: " << R << proc->getName() << "\n"
                   << B << WH << "ID: "           << R << proc->getPID()  << "\n\n";
-
-        // Display logs from the output file written by PrintCommand.
-        std::string logPath = std::string(Config::OUTPUT_DIR) + "/" + proc->getName() + ".txt";
-        std::ifstream logFile(logPath);
-        if (logFile) {
-            std::cout << B << WH << "Logs:\n" << R;
-            std::string line;
-            // Skip the header written by Process constructor ("Process name:" + "Logs:" + blank)
-            int skip = 3;
-            while (std::getline(logFile, line)) {
-                if (skip > 0) { --skip; continue; }
-                std::cout << line << "\n";
-            }
-            std::cout << "\n";
-        }
 
         if (proc->isFinished()) {
             std::cout << B << LG << "Finished!\n" << R;

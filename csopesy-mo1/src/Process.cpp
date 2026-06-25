@@ -1,18 +1,7 @@
 #include "Process.h"
-#include "Config.h"
-#include <filesystem>
-#include <fstream>
 
 Process::Process(int pid, std::string name)
     : pid(pid), name(std::move(name)), currentState(READY), commandCounter(0) {
-    if (Config::ENABLE_FILE_LOGGING) {
-        std::filesystem::create_directories(Config::OUTPUT_DIR);
-        logPath = std::string(Config::OUTPUT_DIR) + "/" + this->name + ".txt";
-        // Write header then close immediately — keeps fd count at O(1).
-        std::ofstream f(logPath, std::ios::trunc);
-        f << "Process name: " << this->name << "\n";
-        f << "Logs:\n\n";
-    }
 }
 
 void Process::addCommand(std::shared_ptr<ICommand> command) {
@@ -51,16 +40,6 @@ void Process::setCoreId(int core) { coreId = core; }
 int Process::getCoreId()         const { return coreId; }
 int Process::getCommandCounter() const { return commandCounter; }
 int Process::getTotalCommands()  const { return (int)commandList.size(); }
-
-void Process::log(const std::string& line) {
-    // Open-append-close per call: keeps file-descriptor count at O(1) regardless
-    // of how many processes are alive. One worker owns the process at a time so
-    // no lock is needed.
-    if (Config::ENABLE_FILE_LOGGING && !logPath.empty()) {
-        std::ofstream f(logPath, std::ios::app);
-        f << line << '\n';
-    }
-}
 
 std::time_t Process::getStartTime()  const { return startTime; }
 std::time_t Process::getFinishTime() const { return finishTime; }
