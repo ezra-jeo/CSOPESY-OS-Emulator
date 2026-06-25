@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <mutex>
 #include <ctime>
 
 // PCB (Process Control Block) — all state the OS needs to manage one process.
@@ -40,6 +41,11 @@ public:
     std::uint8_t  getSleepTicks()   const;
     void          clearSleepRequest();
 
+    // PRINT output log. The worker thread appends via log() while the console thread reads via
+    // getLogs(); both lock logMutex. getLogs() returns a copy so callers iterate safely.
+    void                     log(const std::string& line);
+    std::vector<std::string> getLogs() const;
+
 private:
     int          pid;
     std::string  name;
@@ -53,4 +59,7 @@ private:
 
     std::time_t  startTime  = 0;
     std::time_t   finishTime = 0;
+
+    std::vector<std::string> logs;
+    mutable std::mutex       logMutex;
 };

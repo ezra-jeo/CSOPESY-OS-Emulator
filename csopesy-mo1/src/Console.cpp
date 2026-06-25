@@ -310,6 +310,11 @@ void Console::screenSession(const std::string& name, bool resume) {
         std::cout << B << WH << "Process name: " << R << proc->getName() << "\n"
                   << B << WH << "ID: "           << R << proc->getPID()  << "\n\n";
 
+        std::cout << B << WH << "Logs:\n" << R;
+        for (const auto& entry : proc->getLogs())
+            std::cout << entry << "\n";
+        std::cout << "\n";
+
         if (proc->isFinished()) {
             std::cout << B << LG << "Finished!\n" << R;
         } else {

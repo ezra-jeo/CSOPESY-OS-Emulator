@@ -48,3 +48,13 @@ void Process::requestSleep(std::uint8_t ticks) { sleepPending = true; sleepTicks
 bool Process::hasSleepRequest() const          { return sleepPending; }
 std::uint8_t Process::getSleepTicks()   const  { return sleepTicks; }
 void Process::clearSleepRequest()              { sleepPending = false; sleepTicks = 0; }
+
+void Process::log(const std::string& line) {
+    std::lock_guard<std::mutex> lk(logMutex);
+    logs.push_back(line);
+}
+
+std::vector<std::string> Process::getLogs() const {
+    std::lock_guard<std::mutex> lk(logMutex);
+    return logs;
+}

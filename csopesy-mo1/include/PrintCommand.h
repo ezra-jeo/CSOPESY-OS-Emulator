@@ -2,12 +2,18 @@
 #include "ICommand.h"
 #include <string>
 
-// Concrete command: writes a timestamped line to the owning process's log file.
+// Concrete command: appends a timestamped line to the owning process's PRINT log.
 class PrintCommand : public ICommand {
 public:
+    // Fixed message, e.g. PRINT("Hello world from p01!").
     PrintCommand(int pid, const std::string& toPrint);
+    // Interpolated form, e.g. PRINT("Value from: " + x): prints prefix + the current value of
+    // varName, resolved at execution time (spec §"Barebones process instructions").
+    PrintCommand(int pid, std::string prefix, std::string varName);
     void execute(Process& owner) override;
 
 private:
-    std::string toPrint; // e.g. "Hello world from process_01!"
+    std::string toPrint;        // fixed text, or the prefix when hasVar is true
+    std::string varName;        // variable to interpolate (when hasVar)
+    bool        hasVar = false;
 };
