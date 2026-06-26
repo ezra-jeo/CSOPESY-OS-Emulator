@@ -394,6 +394,32 @@ void Console::printProcessList(std::ostream& os, bool color) const {
         }
     }
 
+    // Sleeping (WAITING) processes are off the cores and off the ready queue (parked on the
+    // scheduler's waiting list), so they appear in neither running nor finished. Surface them by
+    // scanning the registry for the WAITING state.
+    std::vector<std::shared_ptr<Process>> sleeping;
+    {
+        std::lock_guard<std::mutex> lk(registryMutex);
+        for (const auto& kv : registry)
+            if (kv.second->getState() == Process::WAITING)
+                sleeping.push_back(kv.second);
+    }
+
+    os << "\n  " << c(B) << c(CY) << "Sleeping Processes:" << c(R) << "\n"
+       << "  " << c(GR) << std::string(64, '-') << c(R) << "\n";
+    if (sleeping.empty()) {
+        os << c(GR) << "  (none)\n" << c(R);
+    } else {
+        for (const auto& p : sleeping) {
+            os << "  "
+               << c(B) << c(YL) << std::left << std::setw(14) << p->getName() << c(R)
+               << "  " << c(GR) << fmtTime(p->getStartTime()) << c(R)
+               << "  " << c(YL) << "Sleeping" << c(R)
+               << "  " << p->getCommandCounter() << " / " << p->getTotalCommands()
+               << "\n";
+        }
+    }
+
     os << "\n  " << c(B) << c(WH) << "Finished Processes:" << c(R) << "\n"
        << "  " << c(GR) << std::string(64, '-') << c(R) << "\n";
     if (finished.empty()) {

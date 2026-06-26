@@ -77,6 +77,8 @@ main() ──> Console.run()  [main thread: the REPL]
   - `scheduler-start` / `scheduler-stop` — start/stop the generation thread.
   - `screen -s <name>` (create), `screen -r <name>` (re-attach), `screen -ls` (list).
   - `report-util` — writes the same status block to `csopesy-log.txt`.
+  - The list (`screen -ls` / `report-util`) has three **state-driven** sections: **Running**
+    (on a core), **Sleeping** (`WAITING`, scanned from the registry by state), and **Finished**.
   - `exit` — leaves a screen, or quits from the main menu.
   - Inside an attached screen: `process-smi` (refresh details + logs), `exit` (back to menu).
 - **`process-smi` view:** process name, ID, a **Logs:** block, then `Current instruction line` /
@@ -226,6 +228,10 @@ delays-per-exec 0    # extra ms busy-wait before each instruction
 - **CPU tick model:** the tick is a free-running ~1 ms clock, so `SLEEP(X)` ≈ X ms and
   `batch-process-freq X` ≈ one process per X ms. This matches the spec's free-running counter
   pseudocode and is internally consistent; it is *not* "one tick per executed instruction."
+- **Sleeping visibility:** the `Sleeping` section is correct and state-driven, but at the default
+  clock a SLEEP lasts only its tick count in ms (generator emits 1–5 ticks ⇒ ~1–5 ms), so a
+  sleeper is rarely caught in a `screen -ls` snapshot — the section usually reads `(none)`. To make
+  sleeps observable, slow the clock (the watcher's `sleep_for`) or generate longer SLEEPs.
 - **Quiz-6 instruction set** (fixed `ADD/PRINT`, `x/y/z`, `"Value from:"`) is deliberately kept off
   this branch — it lives on `claude/fervent-faraday-wkeyku` as a temporary pre-recording edit so
   this deliverable stays requirement-compliant (randomized generation, default PRINT message).
