@@ -1,4 +1,6 @@
 #include "Process.h"
+#include <ctime>
+#include <sstream>
 
 Process::Process(int pid, std::string name)
     : pid(pid), name(std::move(name)), currentState(READY), commandCounter(0) {
@@ -57,4 +59,15 @@ void Process::log(const std::string& line) {
 std::vector<std::string> Process::getLogs() const {
     std::lock_guard<std::mutex> lk(logMutex);
     return logs;
+}
+
+void Process::logMessage(const std::string& msg) {
+    // std::localtime is not thread-safe in general, but each process's commands execute on
+    // exactly one worker at a time, so this is safe here.
+    std::time_t t = std::time(nullptr);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "(%m/%d/%Y %I:%M:%S%p)", std::localtime(&t));
+    std::ostringstream oss;
+    oss << buf << " Core:" << coreId << " \"" << msg << "\"";
+    log(oss.str());
 }

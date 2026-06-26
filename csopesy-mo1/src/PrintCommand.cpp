@@ -1,8 +1,6 @@
 #include "PrintCommand.h"
 #include "Process.h"
 #include "Config.h"
-#include <ctime>
-#include <sstream>
 #include <thread>
 #include <chrono>
 
@@ -24,20 +22,10 @@ PrintCommand::PrintCommand(int pid, std::string prefix, std::string varName)
       varName(std::move(varName)), hasVar(true) {}
 
 void PrintCommand::execute(Process& owner) {
-    // Timestamp: (MM/DD/YYYY HH:MM:SSAM/PM). std::localtime is not thread-safe in general, but
-    // each process's commands run on exactly one worker at a time, so this is safe here.
-    std::time_t t = std::time(nullptr);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "(%m/%d/%Y %I:%M:%S%p)", std::localtime(&t));
-
     std::string message = toPrint;
     if (hasVar)
         message += std::to_string(owner.getSymbolTable().getVariable(varName));
 
-    // Spec log format: <timestamp> Core:<id> "<message>"
-    std::ostringstream oss;
-    oss << buf << " Core:" << owner.getCoreId() << " \"" << message << "\"";
-    owner.log(oss.str());
-
+    owner.logMessage(message);  // PRINT output is always logged (spec)
     std::this_thread::sleep_for(std::chrono::milliseconds(Config::EXEC_DELAY_MS));
 }

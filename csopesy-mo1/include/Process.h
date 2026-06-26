@@ -45,6 +45,8 @@ public:
     // getLogs(); both lock logMutex. getLogs() returns a copy so callers iterate safely.
     void                     log(const std::string& line);
     std::vector<std::string> getLogs() const;
+    // Wraps msg with the spec line format — (timestamp) Core:<id> "<msg>" — then logs it.
+    void                     logMessage(const std::string& msg);
 
 private:
     int          pid;

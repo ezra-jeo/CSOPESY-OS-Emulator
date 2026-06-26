@@ -15,4 +15,9 @@ struct Operand {
     static Operand fromVar(std::string name)    { return {false, 0, std::move(name)}; }
 
     std::uint16_t resolve(Process& owner) const;
+
+    // Source form for logging: the variable name, or the literal value as text.
+    std::string toString() const {
+        return isLiteral ? std::to_string(literal) : var;
+    }
 };
