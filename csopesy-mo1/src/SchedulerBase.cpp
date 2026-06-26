@@ -30,7 +30,13 @@ void SchedulerBase::stopWatcher() {
 void SchedulerBase::watcherLoop() {
     using namespace std::chrono_literals;
     while (watcherRunning) {
-        std::this_thread::sleep_for(10ms);
+        std::this_thread::sleep_for(1ms);
+
+        // Free-running CPU clock (spec: `while(running) cpuCycles++`). Advancing the tick here —
+        // rather than per executed instruction — keeps it moving even when every process is
+        // sleeping or the ready queue is momentarily empty, so SLEEP timers and tick-driven batch
+        // generation can never stall the system.
+        incrementTick();
 
         std::vector<std::shared_ptr<Process>> toWake;
         {

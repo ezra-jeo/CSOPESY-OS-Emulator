@@ -67,8 +67,9 @@ void CPUWorker::workerLoop() {
 
             proc->executeCurrentCommand();
             proc->moveToNextLine();
-            scheduler.incrementTick();
             ++executed;
+            // Note: the CPU tick is advanced by the scheduler's free-running clock
+            // (SchedulerBase::watcherLoop), not per executed instruction.
 
             // SleepCommand sets a pending sleep request instead of blocking the thread.
             // We handle it here so the core is freed while the process waits.

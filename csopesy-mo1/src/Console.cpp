@@ -239,20 +239,24 @@ void Console::cmdSchedulerStart() {
     }
     generating = true;
     genThread = std::thread([this] {
-        // Approximate batch-process-freq: sleep for freq * max(delaysPerExec, 1) ms.
-        // True CPU-tick accounting would require a shared tick counter from the scheduler.
-        const auto interval = std::chrono::milliseconds(
-            config.batchProcessFreq *
-            std::max<std::uint32_t>(config.delaysPerExec, 1));
-
+        // Spec: generate one process every `batch-process-freq` CPU cycles. Track the scheduler's
+        // free-running CPU tick counter and admit a process each time it advances by
+        // batchProcessFreq ticks. The first process is admitted unconditionally to bootstrap.
+        std::uint64_t lastTick = scheduler->getCpuTick();
+        bool bootstrap = true;
         while (generating.load()) {
-            auto p = generator->generate();
-            {
-                std::lock_guard<std::mutex> lk(registryMutex);
-                registry[p->getName()] = p;
+            std::uint64_t now = scheduler->getCpuTick();
+            if (bootstrap || now - lastTick >= config.batchProcessFreq) {
+                bootstrap = false;
+                lastTick = now;
+                auto p = generator->generate();
+                {
+                    std::lock_guard<std::mutex> lk(registryMutex);
+                    registry[p->getName()] = p;
+                }
+                scheduler->addProcess(p);
             }
-            scheduler->addProcess(p);
-            std::this_thread::sleep_for(interval);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1)); // poll; avoid busy-spin
         }
     });
     std::cout << GR << "  scheduler-start: batch generation started.\n" << R;
