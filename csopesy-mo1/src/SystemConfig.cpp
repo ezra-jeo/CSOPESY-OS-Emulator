@@ -31,6 +31,11 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
         std::string key, value;
         if (!(ss >> key >> value)) continue;
 
+        // The spec writes string values quoted (e.g. scheduler "rr"); strip a surrounding
+        // pair of double-quotes so both quoted and unquoted forms parse.
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+            value = value.substr(1, value.size() - 2);
+
         try {
             if (key == "scheduler") {
                 auto it = schedulerMap.find(value);
