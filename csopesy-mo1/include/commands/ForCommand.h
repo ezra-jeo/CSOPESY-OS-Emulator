@@ -13,6 +13,12 @@ public:
     std::uint32_t getInstructionCount() const override; // body length * iteration
     std::string toString() const override;
 
+    // Returns the body × repeats as a flat list of leaf commands, each annotated with their
+    // iteration context in toString() (e.g. "ADD(x,y,1)  [FOR i=2/3]").
+    // Used by ProcessGenerator so ForCommand participates in generation without being stored
+    // in the commandList at runtime.
+    std::vector<std::shared_ptr<ICommand>> flatten() const;
+
 private:
     std::vector<std::shared_ptr<ICommand>> body;
     int                                    repeats;

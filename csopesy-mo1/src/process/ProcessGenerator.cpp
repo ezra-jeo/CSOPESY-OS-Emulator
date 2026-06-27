@@ -4,6 +4,7 @@
 #include "AddCommand.h"
 #include "SubtractCommand.h"
 #include "SleepCommand.h"
+#include "ForCommand.h"
 #include <random>
 #include <iomanip>
 #include <sstream>
@@ -54,7 +55,7 @@ std::vector<std::shared_ptr<ICommand>> makeFlat(
         std::uniform_int_distribution<int> ticks(1, 5);
         return { std::make_shared<SleepCommand>(pid, static_cast<std::uint8_t>(ticks(rng))) };
     }
-    default: { // FOR — build the body once, then emit it `reps` times (flattened)
+    default: { // FOR — build the body, construct a ForCommand, then flatten with iteration tags
         std::uniform_int_distribution<int> reps(1, 5);
         std::uniform_int_distribution<int> bodyLen(1, 3);
         const int r  = reps(rng);
@@ -65,11 +66,9 @@ std::vector<std::shared_ptr<ICommand>> makeFlat(
             auto sub = makeFlat(pid, name, rng, depth + 1);
             body.insert(body.end(), sub.begin(), sub.end());
         }
-        std::vector<std::shared_ptr<ICommand>> out;
-        out.reserve(body.size() * static_cast<std::size_t>(r));
-        for (int k = 0; k < r; ++k)
-            out.insert(out.end(), body.begin(), body.end());
-        return out;
+        // ForCommand encapsulates the loop structure; flatten() emits body×r annotated leaves
+        // (e.g. "ADD(x,y,1)  [FOR i=2/3]") without storing the ForCommand in the commandList.
+        return ForCommand(pid, std::move(body), r).flatten();
     }
     }
 }
