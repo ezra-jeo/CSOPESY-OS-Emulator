@@ -7,38 +7,49 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SOURCES
     src/main.cpp
-    # ── Seeded FCFS base (working) ───────────────────────────────────────────
-    src/Process.cpp
-    src/PrintCommand.cpp
-    src/CPUWorker.cpp
-    src/SchedulerBase.cpp
-    src/FCFSScheduler.cpp
-    src/Console.cpp
-    # ── Screen multiplexer (UI) ──────────────────────────────────────────────
-    src/ScreenManager.cpp
-    src/MainMenuScreen.cpp
-    src/ProcessScreen.cpp
-    # ── MO1 additions (scaffold / to be implemented) ─────────────────────────
-    src/SystemConfig.cpp
-    src/Operand.cpp
-    src/DeclareCommand.cpp
-    src/AddCommand.cpp
-    src/SubtractCommand.cpp
-    src/SleepCommand.cpp
-    src/ForCommand.cpp
-    src/ProcessGenerator.cpp
-    src/RRScheduler.cpp
+    # ── Process instructions (commands) ──────────────────────────────────────
+    src/commands/PrintCommand.cpp
+    src/commands/DeclareCommand.cpp
+    src/commands/AddCommand.cpp
+    src/commands/SubtractCommand.cpp
+    src/commands/SleepCommand.cpp
+    src/commands/ForCommand.cpp
+    src/commands/Operand.cpp
+    # ── Console / screen multiplexer (UI) ────────────────────────────────────
+    src/console/Console.cpp
+    src/console/ScreenManager.cpp
+    src/console/MainMenuScreen.cpp
+    src/console/ProcessScreen.cpp
+    # ── Process / CPU ────────────────────────────────────────────────────────
+    src/process/Process.cpp
+    src/process/ProcessGenerator.cpp
+    src/process/CPUWorker.cpp
+    # ── Schedulers ───────────────────────────────────────────────────────────
+    src/scheduler/SchedulerBase.cpp
+    src/scheduler/FCFSScheduler.cpp
+    src/scheduler/RRScheduler.cpp
+    # ── Config ───────────────────────────────────────────────────────────────
+    src/config/SystemConfig.cpp
 )
 
 add_executable(csopesy ${SOURCES})
 
-# Use -iquote instead of -I so our include/ dir is only searched for quote-style
-# includes (#include "Foo.h"). This prevents MinGW's pthread.h from resolving
-# its #include <process.h> to our Process.h on the case-insensitive Windows FS.
+# Component include dirs. Use -iquote (not -I) on non-MSVC so these dirs are only searched for
+# quote-style includes (#include "Foo.h") — this prevents MinGW's pthread.h from resolving its
+# #include <process.h> to our process/Process.h on a case-insensitive filesystem.
+set(INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/commands
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/console
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/process
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/scheduler
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/config
+)
 if(MSVC)
-    target_include_directories(csopesy PRIVATE include)
+    target_include_directories(csopesy PRIVATE ${INCLUDE_DIRS})
 else()
-    target_compile_options(csopesy PRIVATE "-iquote${CMAKE_CURRENT_SOURCE_DIR}/include")
+    foreach(d ${INCLUDE_DIRS})
+        target_compile_options(csopesy PRIVATE "-iquote${d}")
+    endforeach()
 endif()
 
 # ── Threading ────────────────────────────────────────────────────────────────
