@@ -1,18 +1,18 @@
 CSOPESY MO1 — Process Scheduler and CLI
 =======================================
 
-Group members:
-  - <NAME 1>
-  - <NAME 2>
-  - <NAME 3>
-  - <NAME 4>
+Group 9 members:
+- Ronald Dawson Catignas
+- Jose Paolo Cruzado
+- Ezra Jeonadab Del Rosario
+- Lorenzo Alfred Nery
 
 Entry point:
   src/main.cpp  (contains main())
 
 What this is:
   A standalone C++20 command-line OS emulator: a process multiplexer plus a
-  command-line interpreter. Seeded from the Phase-1 FCFS demo (csopesy-fcfs/) and
+  command-line interpreter. Continued from the Phase-1 FCFS demo (csopesy-fcfs/) and
   being extended to the full MO1 spec (FCFS + round-robin, config.txt-driven,
   full instruction set, screen multiplexer).
 
@@ -73,13 +73,3 @@ Commands (main menu):
   scheduler-stop     stop generating dummy processes
   report-util        write a CPU utilization report to csopesy-log.txt
   exit               terminate the console
-
-IMPLEMENTATION STATUS (scaffold):
-  Implemented (seeded): FCFS engine, worker threads, PCB, PRINT, screen -ls, boot UI.
-  Stubbed / TODO (search the source for "TODO(student)"):
-    - SystemConfig::load / validate          (src/SystemConfig.cpp)
-    - DECLARE / ADD / SUBTRACT / SLEEP / FOR  (src/*Command.cpp, src/Operand.cpp)
-    - ProcessGenerator                        (src/ProcessGenerator.cpp)
-    - RRScheduler (round-robin)               (src/RRScheduler.cpp)
-    - Console handlers: initialize, screen -s/-r, scheduler-start/stop, report-util
-                                              (src/Console.cpp)
