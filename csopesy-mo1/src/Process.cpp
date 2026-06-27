@@ -71,3 +71,11 @@ void Process::logMessage(const std::string& msg) {
     oss << buf << " Core:" << coreId << " \"" << msg << "\"";
     log(oss.str());
 }
+
+std::vector<std::string> Process::getInstructionListing() const {
+    std::vector<std::string> out;
+    out.reserve(commandList.size());
+    for (const auto& cmd : commandList)
+        out.push_back(cmd->toString());
+    return out;
+}

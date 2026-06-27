@@ -4,7 +4,7 @@ A living reference for the `csopesy-mo1` process scheduler + CLI. For each compo
 explains **what it is technically** and **what it currently does / has today**.
 
 Branch: `feat/cpu-emulator-cli`. Last updated after the PRINT-output, tick-faithful clock, and
-per-command logging work.
+process-smi instruction-listing work.
 
 ---
 
@@ -81,9 +81,11 @@ main() ──> Console.run()  [main thread: the REPL]
     (on a core), **Sleeping** (`WAITING`, scanned from the registry by state), and **Finished**.
   - `exit` — leaves a screen, or quits from the main menu.
   - Inside an attached screen: `process-smi` (refresh details + logs), `exit` (back to menu).
-- **`process-smi` view:** process name, ID, a **Logs:** block, then `Current instruction line` /
-  `Lines of code`, or `Finished!` when complete. `screen -r` on a missing/finished process prints
-  `Process <name> not found.`
+- **`process-smi` view:** process name, ID, a **Logs:** block (PRINT output only, per spec), then
+  `Current instruction line` / `Lines of code` (or `Finished!`), then an **Instructions:** listing —
+  the process's full program rendered as source (FOR shown with its body inline) where the current
+  line is localized by a **colored, bracketed line number** (e.g. `[27]`). `screen -r` on a
+  missing/finished process prints `Process <name> not found.`
 
 ### `SystemConfig` (`SystemConfig.h/.cpp`) — config.txt
 - **Technical:** parses the 7 space-separated parameters and validates each against its range;
@@ -96,8 +98,6 @@ main() ──> Console.run()  [main thread: the REPL]
 - **Technical:** small `constexpr` knobs (the runtime knobs live in `SystemConfig`).
 - **Now:**
   - `EXEC_DELAY_MS = 100` — every PRINT sleeps this long so a run is observable to the eye.
-  - `LOG_PER_COMMAND = true` — **(new)** when true, ADD/SUBTRACT/DECLARE/SLEEP each append a
-    descriptive trace line for monitoring; set `false` for the spec's strict PRINT-only view.
 
 ### `ProcessGenerator` (`ProcessGenerator.h/.cpp`)
 - **Technical:** builds dummy processes. Names them `p01, p02, …`. Each gets a **random** number
@@ -129,18 +129,20 @@ main() ──> Console.run()  [main thread: the REPL]
 - **Now:** complete.
 
 ### Instructions — `ICommand` + the six commands
-- **Technical:** `ICommand` is the base (each `execute(Process&)` mutates the process). Types:
-  PRINT, DECLARE, ADD, SUBTRACT, SLEEP, FOR.
+- **Technical:** `ICommand` is the base; each implements `execute(Process&)` (run it) and
+  `toString()` (source text for the process-smi listing). Types: PRINT, DECLARE, ADD, SUBTRACT,
+  SLEEP, FOR.
 - **Now — each implemented and verified:**
-  - **PRINT** — appends its message to the log (always, spec output). Supports the plain form
+  - **PRINT** — appends its message to the log (spec output). Supports the plain form
     (`"Hello world from p01!"`) and the interpolated form `PRINT("Value from: " + x)` resolved at
     execution time. Sleeps `EXEC_DELAY_MS`.
-  - **DECLARE** — sets a variable; logs `DECLARE(var, value)` when `LOG_PER_COMMAND`.
-  - **ADD / SUBTRACT** — `dest = op2 ± op3`, saturating at 65535 / 0; logs
-    `ADD(x, x, 4) => x = 8` when `LOG_PER_COMMAND`.
-  - **SLEEP(X)** — sets a sleep request (X CPU ticks); the worker yields the core; logs `SLEEP(X)`.
-  - **FOR(body, repeats)** — runs its body inline `repeats` times (counts as one instruction line;
-    its body commands log individually). Nesting ≤ 3 enforced at generation.
+  - **DECLARE** — sets a variable. `toString()` → `DECLARE(var, value)`.
+  - **ADD / SUBTRACT** — `dest = op2 ± op3`, saturating at 65535 / 0. `toString()` → `ADD(x, x, 4)`.
+  - **SLEEP(X)** — sets a sleep request (X CPU ticks); the worker yields the core. → `SLEEP(X)`.
+  - **FOR(body, repeats)** — runs its body inline `repeats` times (counts as one instruction line).
+    `toString()` renders the body inline: `FOR([...], n)`. Nesting ≤ 3 enforced at generation.
+  - Only PRINT writes to the Logs block; the other commands are shown in the **Instructions:**
+    listing instead (via `toString()`), keeping Logs PRINT-only per spec.
 
 ### `IScheduler` (`IScheduler.h`)
 - **Technical:** the interface workers and the console talk to (`addProcess`, `requeue`, `start`,
@@ -215,16 +217,19 @@ delays-per-exec 0    # extra ms busy-wait before each instruction
 2. **Tick-faithful `batch-process-freq`** (`fa07371`) — generation now admits per CPU-tick (was a
    wall-clock sleep coupled to `delays-per-exec`); the watcher became a free-running clock so this
    can't deadlock when the queue drains / a lone process sleeps.
-3. **Per-command monitoring trace** (`3d1e3d3`) — each command logs what it did
-   (`ADD(x, x, 4) => x = 8`), gated by `Config::LOG_PER_COMMAND`.
+3. **Instructions listing in process-smi** — each command implements `toString()`; `process-smi`
+   now shows the full program with a `->` pointer at the current line, so the commands and current
+   position are visible while **Logs** stays PRINT-only (spec). (This replaced an earlier
+   per-command logging trace that wrote non-PRINT commands into the Logs block.)
 
 ---
 
 ## 7. Things to be aware of / decisions
 
-- **`LOG_PER_COMMAND = true`** makes `process-smi` show more than the spec's PRINT-only mockup.
-  Great for monitoring and the loop testcase; if a grader strictly compares the *general* test
-  cases to the mockup, set it `false` and rebuild (recompiling before recording is allowed).
+- **Instructions listing length:** `process-smi` prints the *whole* program. For small processes
+  this is ideal; with the default `min-ins/max-ins` (1000–2000) it prints 1000–2000 lines per
+  refresh. Use modest instruction counts for demos, or switch to a windowed listing (current line
+  ± N) if that becomes unwieldy.
 - **CPU tick model:** the tick is a free-running ~1 ms clock, so `SLEEP(X)` ≈ X ms and
   `batch-process-freq X` ≈ one process per X ms. This matches the spec's free-running counter
   pseudocode and is internally consistent; it is *not* "one tick per executed instruction."

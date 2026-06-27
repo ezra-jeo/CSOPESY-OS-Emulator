@@ -13,3 +13,13 @@ void ForCommand::execute(Process& owner) {
         for (auto& cmd : body)
             cmd->execute(owner);
 }
+
+std::string ForCommand::toString() const {
+    std::string s = "FOR([";
+    for (std::size_t i = 0; i < body.size(); ++i) {
+        if (i) s += ", ";
+        s += body[i]->toString();
+    }
+    s += "], " + std::to_string(repeats) + ")";
+    return s;
+}

@@ -328,6 +328,26 @@ void Console::screenSession(const std::string& name, bool resume) {
                       << proc->getTotalCommands()  << "\n";
         }
         std::cout << "\n";
+
+        // Full instruction listing (the process's program). The current line is localized by a
+        // colored, bracketed line number, e.g. [27]; other lines show a plain number. Keeps the
+        // spec's Logs/instruction-line fields above.
+        std::cout << B << WH << "Instructions:\n" << R;
+        auto listing = proc->getInstructionListing();
+        const int cur = proc->getCommandCounter(); // 1-based current line shown above
+        const int w   = static_cast<int>(std::to_string(listing.size()).size()) + 2; // room for [..]
+        for (std::size_t i = 0; i < listing.size(); ++i) {
+            const int  ln   = static_cast<int>(i + 1);
+            const bool here = (ln == cur);
+            const std::string label = here ? ("[" + std::to_string(ln) + "]")
+                                           : std::to_string(ln);
+            const std::string pad(std::max(0, w - static_cast<int>(label.size())), ' ');
+            if (here)
+                std::cout << pad << B << CY << label << ": " << listing[i] << R << "\n";
+            else
+                std::cout << pad << label << ": " << listing[i] << "\n";
+        }
+        std::cout << "\n";
     };
 
     showInfo();
