@@ -18,6 +18,10 @@ public:
 
     virtual void execute(Process& owner) = 0;
 
+    virtual std::uint32_t getInstructionCount() const { 
+        return 1; // Initially will just return one, but FOR will override to return its count.
+    };
+
     // Source-like text of this instruction for the process-smi listing, e.g.
     // "ADD(x, x, 4)" or "FOR([PRINT(\"hi\")], 3)". Static (no runtime values).
     virtual std::string toString() const = 0;

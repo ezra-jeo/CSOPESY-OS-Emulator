@@ -61,7 +61,6 @@ void CPUWorker::workerLoop() {
             if (quantum > 0 && executed >= quantum) break; // quantum expired
 
             // Extra delay before each instruction (config delays-per-exec; 0 = none).
-            // Note: PrintCommand also has its own seed delay via Config::EXEC_DELAY_MS.
             if (delaysPerExec > 0)
                 std::this_thread::sleep_for(std::chrono::milliseconds(delaysPerExec));
 

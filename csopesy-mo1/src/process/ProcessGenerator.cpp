@@ -108,6 +108,13 @@ void ProcessGenerator::buildInstructions(Process& proc) {
 
     const int pid = proc.getPID();
     const std::string& name = proc.getName();
-    for (std::uint32_t i = 0; i < count; ++i)
-        proc.addCommand(makeRandomCommand(pid, name, rng, 0));
+    std::uint32_t ctr = 0;
+    
+    while (ctr < count) {
+        auto cmd = makeRandomCommand(pid, name, rng, 0);
+        // Get the instruction count and increase the ctr. 
+        // Guard against exceeding, if using a for loop that exceeds the count, truncate for now.
+        
+        proc.addCommand(cmd);
+    }
 }

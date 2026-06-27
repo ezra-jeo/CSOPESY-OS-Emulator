@@ -10,6 +10,7 @@ class ForCommand : public ICommand {
 public:
     ForCommand(int pid, std::vector<std::shared_ptr<ICommand>> body, int repeats);
     void execute(Process& owner) override;
+    std::uint32_t getInstructionCount() const override; // body length * iteration
     std::string toString() const override;
 
 private:
