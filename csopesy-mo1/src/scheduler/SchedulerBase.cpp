@@ -7,7 +7,7 @@
 // Wall-clock duration of one CPU cycle (tick). Workers pace execution to this clock — each
 // instruction consumes (1 + delays-per-exec) cycles — so processes advance at an observable rate
 // even when delays-per-exec is 0. Also the unit for SLEEP ticks and batch-process-freq. Tunable.
-namespace { constexpr int CPU_CYCLE_MS = 10; }
+namespace { constexpr int CPU_CYCLE_MS = 200; }
 
 void SchedulerBase::addToWaiting(std::shared_ptr<Process> p, std::uint64_t wakeAtTick) {
     std::lock_guard<std::mutex> lk(waitingMutex);
