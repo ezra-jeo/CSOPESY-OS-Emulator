@@ -3,8 +3,9 @@
 A living reference for the `csopesy-mo1` process scheduler + CLI. For each component it
 explains **what it is technically** and **what it currently does / has today**.
 
-Branch: `feat/cpu-emulator-cli`. Last updated after the PRINT-output, tick-faithful clock, and
-process-smi instruction-listing work.
+Branch: `fix/timing-and-for` → merged into `feat/cpu-emulator-cli` + `test/cpu-emulator-cli`.
+Last updated after the ScreenManager refactor, component subdirectory layout, Config.h removal,
+clock-paced execution, FOR loop flattening, and windowed process-smi.
 
 ---
 
@@ -29,216 +30,381 @@ Reads `config.txt` on `initialize`. C++20, standard library only (threads, no ex
 ## 2. Big picture — how a run flows
 
 ```
-main() ──> Console.run()  [main thread: the REPL]
+main() ──> Console::run()
+              │  prints boot banner + [  OK  ] messages
               │
-              │ initialize          → SystemConfig.load("config.txt")
-              │                       builds RRScheduler or FCFSScheduler + ProcessGenerator
-              │
-              │ scheduler-start     → spawns a GENERATION thread that admits processes
-              │                       (one every batch-process-freq CPU ticks)
-              │
-              ▼
-        IScheduler (RR or FCFS)
-              │  owns:
-              │   • ready queue                    (processes waiting for a core)
-              │   • SCHEDULER thread               (dispatch ready → idle core)
-              │   • N CPUWorker threads            (one per core, execute instructions)
-              │   • WATCHER/CLOCK thread           (free-running CPU tick + wake sleepers)
-              │   • finished list
-              ▼
-        CPUWorker executes a Process's commands → each command updates the
-        SymbolTable and appends log lines → Console `screen -r`/`process-smi` shows them.
+              └─> ScreenManager::run("main-menu")     [single stdin loop]
+                      │
+                      ├── MainMenuScreen::handleCommand()  ← input focus (main menu)
+                      │     initialize      → Console::cmdInitialize()
+                      │     scheduler-start → Console::cmdSchedulerStart()
+                      │     scheduler-stop  → Console::cmdSchedulerStop()
+                      │     report-util     → Console::cmdReportUtil()
+                      │     screen -ls      → Console::printProcessList()
+                      │     screen -s/-r    → push ProcessScreen onto stack
+                      │     exit            → ScreenAction::quit → loop ends
+                      │
+                      └── ProcessScreen::handleCommand()   ← input focus (attached)
+                            process-smi → render() (windowed instruction listing)
+                            exit        → ScreenAction::pop → back to main menu
+```
+
+`Console` is a **system facade** — it owns config/scheduler/generator/registry/genThread
+and exposes operations. `ScreenManager` owns the stdin loop and the screen stack.
+
+### Scheduler internals
+```
+IScheduler (RR or FCFS)
+  • ready queue
+  • SCHEDULER thread    — dispatch front-of-queue → idle CPUWorker
+  • N CPUWorker threads — execute instructions, clock-paced
+  • WATCHER/CLOCK thread — free-running tick + re-admit sleeping processes
+  • finished list
 ```
 
 ### Threads alive during a run
 | Thread | Count | Job |
 |---|---|---|
-| Console REPL | 1 (main) | Read commands, render `screen`/`process-smi`/`report-util` |
-| Generation | 1 (while `scheduler-start` active) | Admit a new process every `batch-process-freq` ticks |
-| Scheduler | 1 | Dispatch ready processes to idle cores |
-| CPUWorker | `num-cpu` | Execute a process's instructions for one quantum |
-| Watcher / clock | 1 | Advance the CPU tick (free-running) and wake sleeping processes |
+| Console REPL | 1 (main) | ScreenManager stdin loop: render and dispatch commands |
+| Generation | 1 (while scheduler-start) | Admit one process every `batch-process-freq` ticks |
+| Scheduler | 1 | Dispatch ready processes to idle CPUWorkers |
+| CPUWorker | `num-cpu` | Execute a process's instructions (clock-paced) |
+| Watcher / clock | 1 | Advance CPU tick (10 ms/tick) + wake sleeping processes |
 
 ---
 
-## 3. Components
+## 3. File layout
+
+```
+csopesy-mo1/
+├── include/
+│   ├── commands/   ICommand.h  AddCommand.h  DeclareCommand.h  ForCommand.h
+│   │               Operand.h   PrintCommand.h  SleepCommand.h  SubtractCommand.h
+│   ├── console/    Screen.h  ScreenManager.h  Console.h
+│   │               MainMenuScreen.h  ProcessScreen.h
+│   ├── process/    Process.h  CPUWorker.h  ProcessGenerator.h  SymbolTable.h
+│   ├── scheduler/  IScheduler.h  SchedulerBase.h
+│   │               FCFSScheduler.h  RRScheduler.h
+│   └── config/     SystemConfig.h
+└── src/            (mirrors include/ layout)
+    ├── commands/   *.cpp
+    ├── console/    Console.cpp  MainMenuScreen.cpp  ProcessScreen.cpp  ScreenManager.cpp
+    ├── process/    CPUWorker.cpp  Process.cpp  ProcessGenerator.cpp
+    ├── scheduler/  FCFSScheduler.cpp  RRScheduler.cpp  SchedulerBase.cpp
+    ├── config/     SystemConfig.cpp
+    └── main.cpp
+```
+
+No `Config.h`. No `EXEC_DELAY_MS`. Runtime timing is entirely clock-paced (see SchedulerBase).
+
+---
+
+## 4. Components
 
 ### `main.cpp`
-- **Technical:** entry point; constructs `Console` and calls `run()`.
-- **Now:** 4 lines, nothing else.
-
-### `Console` (`Console.h/.cpp`) — the CLI
-- **Technical:** the REPL. Tokenizes input, gates everything behind `initialize`, dispatches the
-  spec commands. Owns the scheduler, the generator, the process **registry** (`name → Process`,
-  mutex-guarded), and the generation thread.
-- **Now — implemented commands:**
-  - `initialize` — loads `config.txt`, builds the scheduler (RR/FCFS) + generator, starts the
-    scheduler. Required before any other command (except `exit`).
-  - `scheduler-start` / `scheduler-stop` — start/stop the generation thread.
-  - `screen -s <name>` (create), `screen -r <name>` (re-attach), `screen -ls` (list).
-  - `report-util` — writes the same status block to `csopesy-log.txt`.
-  - The list (`screen -ls` / `report-util`) has three **state-driven** sections: **Running**
-    (on a core), **Sleeping** (`WAITING`, scanned from the registry by state), and **Finished**.
-  - `exit` — leaves a screen, or quits from the main menu.
-  - Inside an attached screen: `process-smi` (refresh details + logs), `exit` (back to menu).
-- **`process-smi` view:** process name, ID, a **Logs:** block (PRINT output only, per spec), then
-  `Current instruction line` / `Lines of code` (or `Finished!`), then an **Instructions:** listing —
-  the process's full program rendered as source (FOR shown with its body inline) where the current
-  line is localized by a **colored, bracketed line number** (e.g. `[27]`). `screen -r` on a
-  missing/finished process prints `Process <name> not found.`
-
-### `SystemConfig` (`SystemConfig.h/.cpp`) — config.txt
-- **Technical:** parses the 7 space-separated parameters and validates each against its range;
-  returns a human-readable error on bad input.
-- **Now:** all params parsed & range-checked: `num-cpu` [1,128], `scheduler` (fcfs/rr),
-  `quantum-cycles` ≥1, `batch-process-freq` ≥1, `min-ins`/`max-ins` ≥1 with `max ≥ min`,
-  `delays-per-exec` ≥0. Unknown keys / bad values are rejected.
-
-### `Config.h` — compile-time constants
-- **Technical:** small `constexpr` knobs (the runtime knobs live in `SystemConfig`).
-- **Now:**
-  - `EXEC_DELAY_MS = 100` — every PRINT sleeps this long so a run is observable to the eye.
-
-### `ProcessGenerator` (`ProcessGenerator.h/.cpp`)
-- **Technical:** builds dummy processes. Names them `p01, p02, …`. Each gets a **random** number
-  of instructions in `[min-ins, max-ins]`, each instruction a **random** type from the six, with
-  random operands (literals 0–65535 or variables from `{x,y,z,a,b}`). FOR bodies are 1–3 random
-  commands; nesting is capped at depth 3 (spec).
-- **Now:** fully randomized & spec-compliant. PRINT uses the default `"Hello world from <name>!"`.
-  - Note: a separate quiz-6 variant (fixed `ADD/PRINT` set, `x/y/z`, `"Value from:"`) lives only on
-    the `claude/fervent-faraday-wkeyku` branch — intentionally **not** here, to keep this generator
-    requirement-compliant.
-
-### `Process` (`Process.h/.cpp`) — the PCB
-- **Technical:** holds pid, name, state (READY/RUNNING/WAITING/FINISHED), the command list +
-  `commandCounter` (current instruction line), the `SymbolTable`, `coreId`, sleep request flag,
-  and start/finish timestamps.
-- **Now — plus the logging layer (new):** a mutex-guarded in-memory `logs` vector with
-  `log()` (raw append), `getLogs()` (safe copy for the console), and `logMessage()` which wraps a
-  message as `(timestamp) Core:<id> "<msg>"`. In-memory (no per-process files).
-
-### `SymbolTable` (`SymbolTable.h`)
-- **Technical:** `name → int` map for a process's variables; `getVariable` returns 0 for unknown
-  names; `hasVariable` for the auto-declare check.
-- **Now:** used by ADD/SUBTRACT/DECLARE/PRINT. Values are clamped to uint16 at the command level.
-
-### `Operand` (`Operand.h/.cpp`)
-- **Technical:** an ADD/SUBTRACT argument — either a literal uint16 or a variable name.
-  `resolve()` reads the value (auto-declaring missing vars as 0, clamping to [0,65535]);
-  `toString()` renders it for logs.
-- **Now:** complete.
-
-### Instructions — `ICommand` + the six commands
-- **Technical:** `ICommand` is the base; each implements `execute(Process&)` (run it) and
-  `toString()` (source text for the process-smi listing). Types: PRINT, DECLARE, ADD, SUBTRACT,
-  SLEEP, FOR.
-- **Now — each implemented and verified:**
-  - **PRINT** — appends its message to the log (spec output). Supports the plain form
-    (`"Hello world from p01!"`) and the interpolated form `PRINT("Value from: " + x)` resolved at
-    execution time. Sleeps `EXEC_DELAY_MS`.
-  - **DECLARE** — sets a variable. `toString()` → `DECLARE(var, value)`.
-  - **ADD / SUBTRACT** — `dest = op2 ± op3`, saturating at 65535 / 0. `toString()` → `ADD(x, x, 4)`.
-  - **SLEEP(X)** — sets a sleep request (X CPU ticks); the worker yields the core. → `SLEEP(X)`.
-  - **FOR(body, repeats)** — runs its body inline `repeats` times (counts as one instruction line).
-    `toString()` renders the body inline: `FOR([...], n)`. Nesting ≤ 3 enforced at generation.
-  - Only PRINT writes to the Logs block; the other commands are shown in the **Instructions:**
-    listing instead (via `toString()`), keeping Logs PRINT-only per spec.
-
-### `IScheduler` (`IScheduler.h`)
-- **Technical:** the interface workers and the console talk to (`addProcess`, `requeue`, `start`,
-  `stop`, `moveToFinished`, `notifyScheduler`, waiting-list + tick methods, running/finished/core
-  queries). Lets `CPUWorker` call back without knowing the policy.
-
-### `SchedulerBase` (`SchedulerBase.h/.cpp`)
-- **Technical:** shared base for both policies. Owns the **CPU tick counter**, the **waiting
-  list**, and the **watcher thread**.
-- **Now — the watcher is also the clock (new):** every 1 ms it `incrementTick()` (a **free-running
-  clock**, per the spec's `while(running) cpuCycles++`) and re-admits any sleeping process whose
-  wake tick has passed. Because the tick advances on its own — not per executed instruction — the
-  clock never freezes when the ready queue drains or every process sleeps. This is what makes
-  tick-driven generation and SLEEP timers deadlock-free.
-
-### `RRScheduler` (`RRScheduler.h/.cpp`)
-- **Technical:** Round-Robin. A `readyQueue`, a **scheduler thread** that waits for (work + an idle
-  core) and assigns the front process to an idle `CPUWorker` built with `quantum = quantum-cycles`.
-  Preempted processes are pushed to the **tail** via `requeue()`. Keeps a finished list.
-- **Now:** complete; starts N workers + the scheduler loop + the watcher/clock; clean stop/join.
-
-### `FCFSScheduler` (`FCFSScheduler.h/.cpp`)
-- **Technical:** identical structure but workers run with `quantum = 0` → each process runs **to
-  completion** before the core takes the next (no preemption).
-- **Now:** complete; same lifecycle and reporting.
-
-### `CPUWorker` (`CPUWorker.h/.cpp`) — one core
-- **Technical:** a thread that waits to be `assign()`ed a process, then executes up to `quantum`
-  instructions (0 = to completion), applying `delays-per-exec` ms before each. After the quantum it
-  either: marks the process **finished**, **requeues** it (RR preemption), or parks it on the
-  **waiting list** if it hit a SLEEP. Then goes idle and notifies the scheduler.
-- **Now:** complete. Note: it no longer advances the CPU tick per instruction — the free-running
-  clock owns the tick.
+4 lines — constructs `Console` and calls `run()`.
 
 ---
 
-## 4. Configuration (`config.txt`)
+### `Console` (`include/console/Console.h` / `src/console/Console.cpp`) — system facade
+**Technical:** owns the scheduler, process generator, process registry (`name → shared_ptr<Process>`,
+mutex-guarded), and the generation thread. Exposes system operations; no longer contains a REPL.
+
+**Public API:**
+- `run()` — prints boot banner then delegates to `ScreenManager`.
+- `cmdInitialize()` — parses `config.txt`, builds scheduler + generator, starts scheduler.
+- `cmdSchedulerStart()` / `cmdSchedulerStop()` — start/stop the generation thread.
+- `cmdReportUtil()` — writes `printProcessList()` output to `csopesy-log.txt`.
+- `printProcessList(ostream&, bool color)` — Running / Sleeping / Finished table.
+- `isInitialized()` — gate used by MainMenuScreen.
+- `findProcess(name)` — registry lookup; returns `nullptr` if not found.
+- `getOrCreateProcess(name)` — registry lookup; creates + admits if missing.
+
+---
+
+### `ScreenManager` (`include/console/ScreenManager.h` / `src/console/ScreenManager.cpp`)
+**Technical:** owns the single `std::getline` stdin loop plus two structures:
+- **registry** — named screens registered before `run()` (currently only `"main-menu"`).
+- **stack** — active navigation; the top of the stack has input focus.
+
+`run(initialName)` pushes the named screen and loops: reads a line, tokenizes it, calls
+`stack.top()->handleCommand(args)`, then acts on the returned `ScreenAction`:
+- `Stay` → keep looping.
+- `Push(screen)` → call `screen->onEnter()`, push onto stack.
+- `Pop` → pop, call `onEnter()` on the new top (if any).
+- `Quit` → clear the stack and return.
+
+---
+
+### `Screen` interface + `ScreenAction` (`include/console/Screen.h`)
+`Screen`: pure virtual `name()`, `prompt()`, `onEnter()`, `handleCommand(args)`.
+`ScreenAction`: tagged union `{Stay, Push, Pop, Quit}` with the next screen for Push.
+Static factory methods: `stay()`, `push(screen)`, `pop()`, `quit()`.
+
+---
+
+### `MainMenuScreen` (`include/console/MainMenuScreen.h` / `src/console/MainMenuScreen.cpp`)
+**Technical:** implements `Screen`; handles the top-level command set.
+- Prompt: `user@csopesy:~$` (bold green/cyan ANSI).
+- Recognized before init: `initialize`, `exit`.
+- Recognized after init: `screen`, `scheduler-start`, `scheduler-stop`, `report-util`.
+- Anything else → `csosh: command not found: <cmd>`.
+- `screen -s <name>` → `ScreenAction::push(ProcessScreen(getOrCreateProcess(name)))`.
+- `screen -r <name>` → `ScreenAction::push(ProcessScreen(findProcess(name)))` if the process
+  exists and is not finished; otherwise prints `Process <name> not found.`.
+
+---
+
+### `ProcessScreen` (`include/console/ProcessScreen.h` / `src/console/ProcessScreen.cpp`)
+**Technical:** implements `Screen`; the view for an attached process.
+- Prompt: `root:\> ` (bold white ANSI).
+- `onEnter()` calls `render()` immediately on attach.
+- `process-smi` → `render()` again; `exit` → `ScreenAction::pop()`.
+
+**`render()` — windowed instruction listing:**
+Shows the process's name, PID, Logs (PRINT-only), and status (`Current instruction line` /
+`Lines of code` or `Finished!`), then a windowed slice of the instruction listing:
+
+```
+       ... 47 more above
+  [58]: ADD(x, y, 4)           ← current line (bold cyan [N])
+   59 : DECLARE(a, 1000)
+   ...
+       ... 942 more below
+```
+
+Window logic (`CONTEXT = 10`): `lo = max(1, cur-10)`, `hi = min(total, cur+10)`.
+If `cur ≤ 0` (not started): top `2*CONTEXT+1` lines. Hidden lines summarized in gray.
+Small processes (`total ≤ 21`) show the full listing with no summary lines.
+
+---
+
+### `SystemConfig` (`include/config/SystemConfig.h` / `src/config/SystemConfig.cpp`)
+**Technical:** parses `config.txt` key–value pairs and validates ranges.
+
+All 7 parameters:
+| Key | Type | Range |
+|---|---|---|
+| `num-cpu` | int | [1, 128] |
+| `scheduler` | enum | `fcfs` / `rr` (quotes stripped — `"rr"` works) |
+| `quantum-cycles` | uint32 | ≥ 1 |
+| `batch-process-freq` | uint32 | ≥ 1 |
+| `min-ins` | uint32 | ≥ 1 |
+| `max-ins` | uint32 | ≥ min-ins |
+| `delays-per-exec` | uint32 | ≥ 0 (alias `delay-per-exec` also accepted) |
+
+Unknown keys and out-of-range values produce a human-readable error returned by `load()`.
+
+---
+
+### `ProcessGenerator` (`include/process/ProcessGenerator.h` / `src/process/ProcessGenerator.cpp`)
+**Technical:** builds dummy processes. Names them `p01, p02, …` (sequential from `nextPid`).
+
+Key design — **FOR loops are flattened at generation** (not stored as ForCommand objects):
+- `makeFlat(pid, name, rng, depth)` returns `vector<shared_ptr<ICommand>>`.
+  - Leaf types (PRINT/DECLARE/ADD/SUBTRACT/SLEEP) return a single-element vector.
+  - FOR case: generates a body of 1–3 flat commands (recursive, depth ≤ 3), then emits
+    `body × reps` (1–5) as a flat vector — no ForCommand created.
+- `buildInstructions(proc)` draws a count from `[min-ins, max-ins]`, then calls `makeFlat()`
+  in a loop, adding each resulting leaf individually until the count is reached.
+
+Result: every instruction in a process's `commandList` is a leaf (`ICommand` returning
+`getInstructionCount() == 1`). FOR iterations are separately counted, separately logged,
+and separately preemptible.
+
+---
+
+### `Process` / PCB (`include/process/Process.h` / `src/process/Process.cpp`)
+**Technical:** the Process Control Block.
+
+Fields:
+- `pid`, `name` (immutable after construction)
+- `state`: `READY | RUNNING | WAITING | FINISHED`
+- `commandList`: `vector<shared_ptr<ICommand>>` (flat; no FOR nesting at runtime)
+- `commandCounter`: index of next instruction to execute (1-based for display)
+- `SymbolTable`: variable store
+- `coreId`: which CPUWorker is running this (-1 if none)
+- `sleepRequest` flag + `sleepTicks` count (set by SleepCommand)
+- `startTime`, `finishTime` (`time_t`)
+
+Logging (PRINT-only, per spec):
+- `log(string)` / `getLogs()` / `logMessage(coreId, msg)` — mutex-guarded in-memory `logs` vector.
+- Only `PrintCommand::execute()` calls `logMessage()`; other commands write nothing to logs.
+
+`getInstructionListing()` returns `vector<string>` via `toString()` on each command (used by
+`ProcessScreen::render()` for the windowed display).
+
+---
+
+### `SymbolTable` (`include/process/SymbolTable.h`)
+`name → int` map. `getVariable()` returns 0 for unknown names; `hasVariable()` for the
+auto-declare check. Used by ADD/SUBTRACT/DECLARE/PRINT.
+
+---
+
+### `Operand` (`include/commands/Operand.h` / `src/commands/Operand.cpp`)
+An ADD/SUBTRACT argument — either a literal `uint16` or a variable name.
+`resolve(SymbolTable&)` reads the value (auto-declaring missing vars as 0, clamping to [0,65535]).
+`toString()` renders as a number or variable name for the instruction listing.
+
+---
+
+### `ICommand` + the six command types (`include/commands/`)
+`ICommand` base: pure virtual `execute(Process&)` and `toString()`;
+default `getInstructionCount() → 1`.
+
+| Command | `execute()` | `toString()` |
+|---|---|---|
+| **PRINT** | Appends `(timestamp) Core:N "msg"` to `proc.logs` via `logMessage()`. Resolves variable-form messages at execution time. | `PRINT("Hello world from p01!")` |
+| **DECLARE** | `proc.symbolTable.setVariable(name, value)` | `DECLARE(x, 1000)` |
+| **ADD** | `dest = clamp(op2.resolve() + op3.resolve(), 0, 65535)` | `ADD(x, y, 4)` |
+| **SUBTRACT** | `dest = clamp(op2.resolve() - op3.resolve(), 0, 65535)` | `SUBTRACT(x, x, 1)` |
+| **SLEEP** | `proc.setSleepRequest(N)` (sets a flag; CPUWorker yields the core) | `SLEEP(3)` |
+| **FOR** | *(not instantiated at runtime — flattened by `makeFlat()` at generation)* | *(N/A)* |
+
+Only PRINT writes to the Logs block; all other commands are visible only in the Instructions
+listing (via `toString()`), keeping Logs PRINT-only per spec.
+
+---
+
+### `IScheduler` (`include/scheduler/IScheduler.h`)
+Interface shared by workers and the console: `addProcess`, `requeue`, `start`, `stop`,
+`moveToFinished`, `notifyScheduler`, waiting-list + tick methods, `getRunningProcesses`,
+`getFinishedProcesses`, `getNumCores`, `getActiveCores`. Lets `CPUWorker` call back without
+knowing the scheduling policy.
+
+---
+
+### `SchedulerBase` (`include/scheduler/SchedulerBase.h` / `src/scheduler/SchedulerBase.cpp`)
+Shared base for both policies. Owns the **CPU tick counter**, the **waiting list**, and the
+**watcher thread**.
+
+```cpp
+namespace { constexpr int CPU_CYCLE_MS = 10; }
+
+void SchedulerBase::watcherLoop() {
+    while (watcherRunning) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(CPU_CYCLE_MS));
+        incrementTick();     // free-running CPU clock
+        // re-admit sleepers whose wake tick has passed → requeueReady(proc)
+    }
+}
+```
+
+The watcher is the **only** thing that advances the tick. Because the tick keeps moving even when
+every process is sleeping or the ready queue is empty, `SLEEP` timers and `batch-process-freq`
+generation can never deadlock.
+
+---
+
+### `RRScheduler` (`include/scheduler/RRScheduler.h` / `src/scheduler/RRScheduler.cpp`)
+Round-Robin. Scheduler thread waits for (work + idle core) → assigns front of ready queue to an
+idle `CPUWorker` with `quantum = quantum-cycles`. Preempted processes are requeued at the
+**tail** via `requeue()`. Starts N workers + scheduler loop + watcher; clean stop/join.
+
+---
+
+### `FCFSScheduler` (`include/scheduler/FCFSScheduler.h` / `src/scheduler/FCFSScheduler.cpp`)
+Identical structure to RR but workers receive `quantum = 0` → each process runs **to completion**
+before the core takes another (no preemption).
+
+---
+
+### `CPUWorker` (`include/process/CPUWorker.h` / `src/process/CPUWorker.cpp`)
+One thread per core. Waits idle until `assign(proc)` is called, then:
+
+1. Binds the core to the PCB (`setCoreId(id)`, `setState(RUNNING)`).
+2. Executes up to `quantum` instructions (0 = to completion):
+   - **Clock-paced:** before each instruction, busy-waits until
+     `getCpuTick() ≥ current + 1 + delaysPerExec`. This paces execution to `CPU_CYCLE_MS`
+     wall-clock time per instruction when `delays-per-exec = 0`.
+   - Calls `proc->executeCurrentCommand()` + `moveToNextLine()`.
+   - **SLEEP detect:** if `proc->hasSleepRequest()`, computes `wakeAt = tick + sleepTicks`,
+     calls `scheduler.addToWaiting(proc, wakeAt)`, sets state `WAITING`, and breaks.
+3. Dispatches result:
+   - Yielded for sleep → watcher re-admits via `requeueReady()`.
+   - Finished → `scheduler.moveToFinished(proc)`.
+   - Quantum expired → `scheduler.requeue(proc)` (tail of ready queue, RR preemption).
+4. Clears slot, sets `idle = true`, notifies scheduler.
+
+---
+
+## 5. Configuration (`config.txt`)
 ```
 num-cpu 4            # cores [1,128]
-scheduler rr         # rr | fcfs
+scheduler rr         # rr | fcfs  (quotes accepted: scheduler "rr")
 quantum-cycles 5     # RR time slice (instructions per turn)
 batch-process-freq 1 # admit one process every N CPU ticks
 min-ins 1000         # min instructions per process
 max-ins 2000         # max instructions per process
-delays-per-exec 0    # extra ms busy-wait before each instruction
+delays-per-exec 0    # extra CPU ticks to wait before each instruction
+                     # (also accepted: delay-per-exec)
 ```
 
 ---
 
-## 5. Current status — requirements checklist (all verified)
+## 6. Current status — requirements checklist (all verified)
 
 | Requirement | Status |
 |---|---|
-| Commands PRINT/DECLARE/ADD/SUBTRACT/SLEEP/FOR | ✅ all functional |
+| Commands PRINT / DECLARE / ADD / SUBTRACT / SLEEP / FOR | ✅ all functional |
 | PRINT default `"Hello world from <name>!"` + variable form | ✅ |
 | uint16 clamp [0,65535] & auto-declare missing vars to 0 | ✅ |
-| FOR nesting ≤ 3 | ✅ |
+| FOR nesting ≤ 3 at generation; each iteration a separate top-level instruction | ✅ |
+| FOR iterations separately counted, logged, and preemptible | ✅ (flattened by makeFlat) |
 | Processes run to completion (`Finished n/n`) | ✅ |
-| `process-smi`: name, ID, logs, instruction line, `Finished!` | ✅ |
+| `process-smi`: name, ID, Logs (PRINT-only), instruction line, `Finished!` | ✅ |
+| Windowed process-smi (±10 lines, `... N more above/below`) | ✅ |
 | `screen -r` missing/finished → `Process … not found.` | ✅ |
 | `screen -ls` / `report-util` → `csopesy-log.txt` | ✅ |
+| `screen -ls` shows Running / Sleeping / Finished (state-driven) | ✅ |
 | All 7 config params parsed + validated | ✅ |
-| `batch-process-freq` measured in CPU ticks | ✅ (tick-faithful) |
-| FCFS + RR both schedule and run the clock | ✅ |
+| `delay-per-exec` accepted as alias for `delays-per-exec` | ✅ |
+| Quoted scheduler value (`scheduler "rr"`) accepted | ✅ |
+| `batch-process-freq` measured in CPU ticks (tick-faithful) | ✅ |
+| Clock-paced execution (1 + delays-per-exec ticks per instruction) | ✅ |
+| FCFS + RR both schedule; watcher is the free-running clock | ✅ |
+| Component subdirectory layout (commands/console/process/scheduler/config) | ✅ |
+| No Config.h / no EXEC_DELAY_MS; timing is config-driven | ✅ |
 
 ---
 
-## 6. Recent changes (this work)
+## 7. Recent changes
 
-1. **PRINT output + process-smi logs** (`9c32e50`) — `PrintCommand` was a stub; added the Process
-   log buffer, real PRINT logging, and the `Logs:` section in `process-smi`.
-2. **Tick-faithful `batch-process-freq`** (`fa07371`) — generation now admits per CPU-tick (was a
-   wall-clock sleep coupled to `delays-per-exec`); the watcher became a free-running clock so this
-   can't deadlock when the queue drains / a lone process sleeps.
-3. **Instructions listing in process-smi** — each command implements `toString()`; `process-smi`
-   now shows the full program with a `->` pointer at the current line, so the commands and current
-   position are visible while **Logs** stays PRINT-only (spec). (This replaced an earlier
-   per-command logging trace that wrote non-PRINT commands into the Logs block.)
+1. **ScreenManager + Screen multiplexer** — `Console.run()` now delegates to `ScreenManager`;
+   `MainMenuScreen` and `ProcessScreen` implement the `Screen` interface. Two duplicated REPL
+   loops replaced by a single `ScreenManager::run()` loop with a push/pop stack.
+2. **Console → facade** — all UI logic moved to MainMenuScreen; `Console` exposes only system
+   operations (`cmdInitialize`, `cmdSchedulerStart`, etc.).
+3. **Component subdirectory layout** — files split into `include/commands`, `include/console`,
+   `include/process`, `include/scheduler`, `include/config` (and matching `src/` subdirs).
+   CMakeLists.txt updated with `-iquote` per-dir include paths.
+4. **Config.h removed** — `EXEC_DELAY_MS` gone. Observable timing now comes from the
+   clock-paced CPU cycle (`CPU_CYCLE_MS = 10` ms/tick) and `delays-per-exec` in config.
+5. **Clock-paced execution** — watcher sleeps 10 ms per tick; each instruction waits
+   `(1 + delays-per-exec)` ticks before executing. At `delays-per-exec 0`, a 1000-instruction
+   process takes ~10 s, keeping it observable.
+6. **FOR loop flattening** (`makeFlat()` in ProcessGenerator) — no ForCommand objects at runtime;
+   each body-×-repetitions result is stored as individual top-level instructions. Generator
+   infinite loop fixed (`ctr` incremented per flat leaf).
+7. **Windowed process-smi** (ProcessScreen::render, `CONTEXT = 10`) — shows ±10 lines around
+   the current instruction instead of the full 1000–2000 line listing.
+8. **Config aliases** — `delay-per-exec` accepted as alias for `delays-per-exec`; quoted
+   scheduler values (`scheduler "rr"`) work.
 
 ---
 
-## 7. Things to be aware of / decisions
+## 8. Decisions & caveats
 
-- **Instructions listing length:** `process-smi` prints the *whole* program. For small processes
-  this is ideal; with the default `min-ins/max-ins` (1000–2000) it prints 1000–2000 lines per
-  refresh. Use modest instruction counts for demos, or switch to a windowed listing (current line
-  ± N) if that becomes unwieldy.
-- **CPU tick model:** the tick is a free-running ~1 ms clock, so `SLEEP(X)` ≈ X ms and
-  `batch-process-freq X` ≈ one process per X ms. This matches the spec's free-running counter
-  pseudocode and is internally consistent; it is *not* "one tick per executed instruction."
-- **Sleeping visibility:** the `Sleeping` section is correct and state-driven, but at the default
-  clock a SLEEP lasts only its tick count in ms (generator emits 1–5 ticks ⇒ ~1–5 ms), so a
-  sleeper is rarely caught in a `screen -ls` snapshot — the section usually reads `(none)`. To make
-  sleeps observable, slow the clock (the watcher's `sleep_for`) or generate longer SLEEPs.
-- **Quiz-6 instruction set** (fixed `ADD/PRINT`, `x/y/z`, `"Value from:"`) is deliberately kept off
-  this branch — it lives on `claude/fervent-faraday-wkeyku` as a temporary pre-recording edit so
-  this deliverable stays requirement-compliant (randomized generation, default PRINT message).
-- **`EXEC_DELAY_MS = 100`** on PRINT is what makes runs watchable; with `delays-per-exec 0` it is
-  the main thing slowing execution.
+- **CPU tick model:** 1 tick = 10 ms wall-clock (`CPU_CYCLE_MS`). `SLEEP(N)` ≈ N×10 ms.
+  `batch-process-freq N` ≈ one process per N×10 ms. This matches the spec's free-running
+  counter pseudocode; it is *not* "one tick per executed instruction."
+- **Sleeping visibility:** at `delays-per-exec 0`, SLEEP lasts `ticks × 10 ms`. The generator
+  emits 1–5 tick SLEEPs → 10–50 ms. A `screen -ls` snapshot will rarely catch a sleeper.
+  Increase SLEEP values or slow the clock to make the Sleeping section observable.
+- **No ForCommand at runtime:** `ForCommand.cpp` and `.h` are still compiled but
+  `ProcessGenerator` never calls its constructor. The class exists only for the shape.
+- **`screen -r` on finished:** prints `Process <name> not found.` (same as missing). The spec
+  says "not found" — distinguishing finished vs. missing is not required.
+- **Logs grow unbounded:** every PRINT appends to the in-memory `logs` vector for the life of
+  the process. No tail-limit is applied (out of scope for current requirements).
