@@ -14,6 +14,10 @@ set(SOURCES
     src/SchedulerBase.cpp
     src/FCFSScheduler.cpp
     src/Console.cpp
+    # ── Screen multiplexer (UI) ──────────────────────────────────────────────
+    src/ScreenManager.cpp
+    src/MainMenuScreen.cpp
+    src/ProcessScreen.cpp
     # ── MO1 additions (scaffold / to be implemented) ─────────────────────────
     src/SystemConfig.cpp
     src/Operand.cpp
