@@ -9,6 +9,7 @@ class SleepCommand : public ICommand {
 public:
     SleepCommand(int pid, std::uint8_t ticks);
     void execute(Process& owner) override;
+    std::string toString() const override;
 
     std::uint8_t getTicks() const { return ticks; }
 

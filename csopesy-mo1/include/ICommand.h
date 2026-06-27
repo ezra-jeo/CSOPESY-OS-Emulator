@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 class Process; // forward-declared so execute() can take the owning PCB
 
@@ -16,6 +17,11 @@ public:
     CommandType getCommandType();
 
     virtual void execute(Process& owner) = 0;
+
+    // Source-like text of this instruction for the process-smi listing, e.g.
+    // "ADD(x, x, 4)" or "FOR([PRINT(\"hi\")], 3)". Static (no runtime values).
+    virtual std::string toString() const = 0;
+
     virtual ~ICommand() = default;
 
 protected:

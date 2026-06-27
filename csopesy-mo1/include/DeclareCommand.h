@@ -10,6 +10,7 @@ class DeclareCommand : public ICommand {
 public:
     DeclareCommand(int pid, std::string var, std::uint16_t value);
     void execute(Process& owner) override;
+    std::string toString() const override;
 
 private:
     std::string   var;

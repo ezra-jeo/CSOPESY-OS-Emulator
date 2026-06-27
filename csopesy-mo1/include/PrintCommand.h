@@ -11,6 +11,7 @@ public:
     // varName, resolved at execution time (spec §"Barebones process instructions").
     PrintCommand(int pid, std::string prefix, std::string varName);
     void execute(Process& owner) override;
+    std::string toString() const override;
 
 private:
     std::string toPrint;        // fixed text, or the prefix when hasVar is true

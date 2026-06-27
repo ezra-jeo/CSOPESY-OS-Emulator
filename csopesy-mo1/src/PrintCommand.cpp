@@ -29,3 +29,9 @@ void PrintCommand::execute(Process& owner) {
     owner.logMessage(message);  // PRINT output is always logged (spec)
     std::this_thread::sleep_for(std::chrono::milliseconds(Config::EXEC_DELAY_MS));
 }
+
+std::string PrintCommand::toString() const {
+    if (hasVar)
+        return "PRINT(\"" + toPrint + "\" + " + varName + ")";
+    return "PRINT(\"" + toPrint + "\")";
+}

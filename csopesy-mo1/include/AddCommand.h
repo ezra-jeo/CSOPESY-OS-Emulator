@@ -9,6 +9,7 @@ class AddCommand : public ICommand {
 public:
     AddCommand(int pid, std::string dest, Operand lhs, Operand rhs);
     void execute(Process& owner) override;
+    std::string toString() const override;
 
 private:
     std::string dest;

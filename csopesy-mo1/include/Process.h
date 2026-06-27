@@ -48,6 +48,10 @@ public:
     // Wraps msg with the spec line format — (timestamp) Core:<id> "<msg>" — then logs it.
     void                     logMessage(const std::string& msg);
 
+    // Source-like text of every instruction (FOR rendered with its body), index i = line i+1.
+    // Used by process-smi to show the program with a pointer at the current line.
+    std::vector<std::string> getInstructionListing() const;
+
 private:
     int          pid;
     std::string  name;
