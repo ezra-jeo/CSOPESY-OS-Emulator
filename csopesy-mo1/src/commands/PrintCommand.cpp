@@ -1,8 +1,6 @@
 #include "PrintCommand.h"
 #include "Process.h"
-#include "Config.h"
 #include <thread>
-#include <chrono>
 
 // ── ICommand trivial definitions ─────────────────────────────────────────────
 // (No separate ICommand.cpp in the project layout; these two belong here.)
@@ -27,7 +25,6 @@ void PrintCommand::execute(Process& owner) {
         message += std::to_string(owner.getSymbolTable().getVariable(varName));
 
     owner.logMessage(message);  // PRINT output is always logged (spec)
-    std::this_thread::sleep_for(std::chrono::milliseconds(Config::EXEC_DELAY_MS));
 }
 
 std::string PrintCommand::toString() const {
