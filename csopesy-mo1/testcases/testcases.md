@@ -1,24 +1,20 @@
 # CSOPESY MO1 — Test Cases
 
 Run from the `csopesy-mo1/` directory. Copy the relevant config file to `config.txt`
-before each test, then launch `.\build\csopesy.exe`.
+before each test, then launch the emulator (`.\build\csopesy.exe` / `./build/csopesy`).
+
+**TC3–TC6 below mirror the graded quiz questions exactly** (same parameters, same command
+sequence, same expected output). TC1–TC2 are internal dev checks.
+
+> Config note: the quiz writes `scheduler "rr"` (quoted) and `delay-per-exec 0` (singular).
+> The parser accepts both — quoted/unquoted scheduler, and `delay-per-exec` / `delays-per-exec`.
 
 ---
 
-## Test Case 1 — FCFS Baseline
+## Test Case 1 — FCFS Baseline (dev)
 
-**Purpose:** Verify FCFS scheduling, `screen -ls` format, `report-util` output, and
-that processes cycle through Running → Finished correctly on 2 cores.
+**Config (`tc1_config.txt`):** 2 cores · FCFS · 10–20 instructions · batch-freq 1.
 
-**Setup:**
-```
-copy testcases\tc1_config.txt config.txt
-.\build\csopesy.exe
-```
-
-**Config:** 2 cores · FCFS · 10–20 instructions · delays-per-exec 0 · batch-freq 1
-
-**Commands to run (in order):**
 ```
 initialize
 scheduler-start
@@ -29,125 +25,107 @@ report-util
 exit
 ```
 
-**Expected output:**
-
-| Command | Expected |
-|---|---|
-| `initialize` | `Initialized: 2 core(s), scheduler=FCFS` |
-| `scheduler-start` | `batch generation started` |
-| `screen -ls` (first, ~1 s after start) | CPU Utilization 50–100%, ≥1 process in Running with `X / total` |
-| `scheduler-stop` | `batch generation stopped` |
-| `screen -ls` (second, ~5 s later) | Running: (none) or near-empty; Finished: multiple processes each showing `N / N` |
-| `report-util` | `Report generated at csopesy-log.txt`; file exists with plain-text copy of the table |
-| `exit` | Clean shutdown (no hang) |
-
-**What to verify:**
-- Each finished process shows the same number for both sides of `N / N`.
-- `csopesy-log.txt` contains no ANSI escape codes (plain text).
-- `output/p01.txt` … `output/pXX.txt` exist with timestamped log lines.
+Verify: Running shows `X / total`; after stop+wait, processes reach Finished `N / N`;
+`report-util` writes a plain-text `csopesy-log.txt` matching `screen -ls`.
 
 ---
 
-## Test Case 2 — RR Preemption Visible
+## Test Case 2 — RR Preemption Visible (dev)
 
-**Purpose:** Verify that RR with `quantum-cycles 3` actually cycles processes between
-cores — i.e., on repeated `screen -ls` calls the progress counter (`X / total`)
-advances slowly and multiple distinct processes appear in Running.
+**Config (`tc2_config.txt`):** 2 cores · RR · quantum 3 · 30–50 instructions · batch-freq 1.
 
-**Setup:**
-```
-copy testcases\tc2_config.txt config.txt
-.\build\csopesy.exe
-```
-
-**Config:** 2 cores · RR · quantum=3 · 30–50 instructions · delays-per-exec 0 · batch-freq 1
-
-**Commands to run:**
 ```
 initialize
 scheduler-start
-screen -ls
-screen -ls
-screen -ls
+screen -ls   (repeat 3x ~1-2 s apart)
 scheduler-stop
 screen -ls
 exit
 ```
 
-Type each `screen -ls` about 1–2 seconds apart.
-
-**Expected output:**
-
-| Observation | Expected under RR | Would indicate bug if... |
-|---|---|---|
-| 1st `screen -ls` | 1–2 processes in Running, each at low `X / total` | All finished on first call → quantum not firing |
-| 2nd `screen -ls` | Same processes still Running, `X` incremented (or different process on that core) | Same `X` as before → RR not making progress |
-| 3rd `screen -ls` | More processes in Running or Finished; `X` clearly advancing across calls | Stuck at same `X` → preemption not working |
-| After `scheduler-stop` + wait | All admitted processes eventually reach Finished | Processes hang forever → scheduler deadlock |
-
-**Key RR proof:** On at least two consecutive `screen -ls` calls you should see the
-*same process name on the same core with a different* `X / total` value — meaning it
-was preempted, re-queued, and dispatched again.
+Verify: on consecutive `screen -ls` calls the same process on the same core shows a different
+`X / total` — proof it was preempted, re-queued, and dispatched again.
 
 ---
 
-## Test Case 3 — `screen -s` / `screen -r` and Edge Cases
+## Test Case 3 — 100% CPU Utilization (Quiz Q3)
 
-**Purpose:** Verify process attach/re-attach, `process-smi` live output, and the
-"not found" rejection for unknown or finished processes.
+**Config (`tc3_config.txt`):** 4 cores · RR · quantum 5 · batch-freq 1 · 1000–2000 instructions ·
+delay-per-exec 0.
 
-**Setup:**
-```
-copy testcases\tc3_config.txt config.txt
-.\build\csopesy.exe
-```
+**Sequence:**
+1. `scheduler-start`
+2. wait 5 seconds
+3. `screen -ls`
 
-**Config:** 4 cores · FCFS · 40–60 instructions · delays-per-exec 0 · batch-freq 3
+**Expected:** `screen -ls` shows **CPU Utilization: 100%**, Cores Used `4 / 4`, Cores Available `0`,
+and **mostly running** processes.
 
-**Commands to run:**
-```
-initialize
-screen -s myproc
-```
-*(now inside the screen sub-prompt)*
-```
-process-smi
-process-smi
-exit
-```
-*(back at main menu)*
-```
-screen -r myproc
-```
-*(inside again — if process is still running)*
-```
-process-smi
-exit
-```
-*(back at main menu — wait ~10 s for myproc to finish)*
-```
-screen -r myproc
-screen -r ghost
-exit
-```
+*Verified:* util 100%, cores 4/4, processes in Running.
 
-**Expected output:**
+---
 
-| Command | Expected |
-|---|---|
-| `screen -s myproc` | Screen clears; shows `Process name: myproc`, `ID: 1`, `Logs:`, `Current instruction line: X`, `Lines of code: Y` |
-| 1st `process-smi` | Same view, `X` may have advanced (process runs in background) |
-| 2nd `process-smi` | `X` higher than before; if finished shows `Finished!` instead of counter |
-| `exit` (from screen) | Returns to `user@csopesy:~$` prompt |
-| `screen -r myproc` (while running) | Re-attaches; shows updated `X / Y` |
-| `screen -r myproc` (after finished) | `Process myproc not found.` |
-| `screen -r ghost` | `Process ghost not found.` |
+## Test Case 4 — 0% Utilization + report-util (Quiz Q4)
 
-**What to verify:**
-- Logs section shows `(timestamp) Core:N "Hello world from myproc!"` entries.
-- `Current instruction line` strictly increases between `process-smi` calls.
-- Once `Finished!` is shown, `screen -r` on that name is properly rejected.
-- The `exit` inside the screen prompt does NOT exit the whole program.
+**Config (`tc4_config.txt`):** 32 cores · RR · quantum 1 · batch-freq 2 · 100 instructions (min=max) ·
+delay-per-exec 0.
+
+**Sequence:**
+1. `scheduler-start`
+2. wait 10 seconds
+3. `scheduler-stop`
+4. wait 30 seconds
+5. `screen -ls`
+6. `report-util`
+
+**Expected:** `screen -ls` shows **CPU Utilization: 0%** and **mostly finished** processes; the
+`csopesy-log.txt` written by `report-util` shows the **same output** as `screen -ls`.
+
+---
+
+## Test Case 5 — `screen -s` Manual Processes (Quiz Q5)
+
+**Config (`tc5_config.txt`):** 4 cores · RR · quantum 5 · batch-freq 1 · 1000 instructions (min=max) ·
+delay-per-exec 0. (Instruction count per process comes from the config.)
+
+**Sequence:**
+1. Create three processes with `screen -s`: `proc-01`, `proc-02`, `proc-03`.
+2. `screen -ls`
+3. wait 5 seconds
+4. For each process: `screen -r <name>`, then `process-smi`.
+
+**Expected:**
+- `screen -s` creates each of the 3 processes successfully.
+- `screen -ls` lists all 3.
+- `screen -r` + `process-smi` lets you access each one and prints its **current instruction line**
+  and **total lines of code** (plus the Logs block and the Instructions listing).
+
+---
+
+## Test Case 6 — Increasing x / y / z (Quiz Q6)
+
+> **Status: config only.** The quiz also requires a temporary emulator change (every process built
+> with `x=y=z=0` and the fixed set `FOR([ADD(x,x,1), PRINT("Value from: "+x), ADD(y,y,1),
+> PRINT("Value from: "+y), ADD(z,z,1), PRINT("Value from: "+z)], 100)`). That generator override is
+> **not applied yet** — only the config is provided here.
+
+**Config (`tc6_config.txt`):** 1 core · RR · quantum 20 · batch-freq 1 · 1000 instructions (min=max) ·
+delay-per-exec 0.
+
+**Sequence:**
+1. `scheduler-start`
+2. wait 5 seconds
+3. `screen -r <process>`
+4. `process-smi` every 2 seconds for 10 seconds
+5. `exit` (leave the screen)
+6. Repeat 3-5 three times, viewing a different process each time.
+
+**Expected:** for all three viewed processes, the variables x, y, z clearly show an increasing value
+(visible in the Logs as `Value from: 1`, `Value from: 2`, …).
+
+**To make this pass you still need to:** apply the test-6 generator override, and flatten the FOR so
+each `ADD`/`PRINT` is a top-level instruction (otherwise the single FOR runs all 100 iterations in
+one un-preemptible step under quantum 20 — see Known Limitations).
 
 ---
 
@@ -155,6 +133,5 @@ exit
 
 | Item | Behaviour | Reason |
 |---|---|---|
-| FOR mid-loop preemption | A FOR loop with many iterations holds the core for all of them before RR can preempt | Sub-instruction command counter not wired into the quantum tracker |
-| `screen -ls` Core spacing | Shows `Core:0` not `Core: 0` | Minor format deviation from spec mockup |
-| Batch-freq timing | Approximated as wall-clock ms, not true CPU tick count | Requires a shared tick counter from the scheduler |
+| FOR mid-loop preemption | A `FOR` runs all its iterations in one instruction-line step, so RR can't preempt mid-loop and the instruction-line counter doesn't advance per iteration | `ForCommand::execute` runs the whole body inline; the sub-instruction counter isn't wired into the quantum. Relevant to TC6 (flattening needed). |
+| `screen -ls` Core spacing | Shows `Core:0` not `Core: 0` | Minor format deviation from the spec mockup |
