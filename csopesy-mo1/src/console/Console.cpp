@@ -1,6 +1,8 @@
 #include "Console.h"
 #include "FCFSScheduler.h"
 #include "RRScheduler.h"
+#include "ScreenManager.h"
+#include "MainMenuScreen.h"
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -128,67 +130,16 @@ void Console::run() {
     printBanner();
     printBootMessages();
 
-    std::string line;
-    while (true) {
-        std::cout << B << LG << "user@csopesy" << R
-                  << ":"
-                  << B << CY << "~" << R
-                  << "$ ";
-        std::cout.flush();
-
-        if (!std::getline(std::cin, line)) break;
-
-        auto args = tokenize(line);
-        if (args.empty()) continue;
-        if (!dispatch(args)) break;
-    }
+    // Hand input control to the screen multiplexer. The main menu is registered as a named screen
+    // and run as the initial one; `screen -s/-r` push a ProcessScreen, `exit` quits.
+    ScreenManager manager;
+    manager.registerScreen(std::make_shared<MainMenuScreen>(*this));
+    manager.run("main-menu");
 
     // Cleanup before returning to main.
     generating = false;
     if (genThread.joinable()) genThread.join();
     if (scheduler) scheduler->stop();
-}
-
-// ── Command interpreter ───────────────────────────────────────────────────────
-
-std::vector<std::string> Console::tokenize(const std::string& line) {
-    std::vector<std::string> out;
-    std::istringstream iss(line);
-    for (std::string tok; iss >> tok; ) out.push_back(tok);
-    return out;
-}
-
-bool Console::dispatch(const std::vector<std::string>& args) {
-    const std::string& cmd = args[0];
-
-    if (cmd == "exit") {
-        std::cout << "\n" << GR << "  Shutting down CSOPESY OS...\n" << R << "\n";
-        return false;
-    }
-
-    if (cmd == "initialize") { cmdInitialize(); return true; }
-
-    // Recognize the set of post-init commands before checking the gate.
-    static const std::set<std::string> known = {
-        "screen", "scheduler-start", "scheduler-stop", "report-util"
-    };
-
-    if (!initialized) {
-        std::cout << GR << "error: " << R << "run initialize first\n";
-        return true;
-    
-    } else if (known.find(cmd) == known.end()) {
-        std::cout << GR << "csosh: " << R
-                  << "command not found: " << YL << cmd << R << "\n";
-        return true;
-    }
-
-    if (cmd == "screen")          { cmdScreen(args);     return true; }
-    if (cmd == "scheduler-start") { cmdSchedulerStart(); return true; }
-    if (cmd == "scheduler-stop")  { cmdSchedulerStop();  return true; }
-    if (cmd == "report-util")     { cmdReportUtil();     return true; }
-
-    return true;
 }
 
 // ── Command handlers ──────────────────────────────────────────────────────────
@@ -219,17 +170,6 @@ void Console::cmdInitialize() {
     std::string statusLine = "initialized — "
         + std::to_string(config.numCpu) + " core(s), scheduler=" + policy;
     printBanner(statusLine);
-}
-
-void Console::cmdScreen(const std::vector<std::string>& args) {
-    if (args.size() >= 2 && args[1] == "-ls") {
-        printProcessList(std::cout, true);
-        return;
-    }
-    if (args.size() >= 3 && args[1] == "-s") { screenSession(args[2], false); return; }
-    if (args.size() >= 3 && args[1] == "-r") { screenSession(args[2], true);  return; }
-
-    std::cout << GR << "  usage: screen -ls | screen -s <name> | screen -r <name>\n" << R;
 }
 
 void Console::cmdSchedulerStart() {
@@ -282,96 +222,25 @@ void Console::cmdReportUtil() {
     std::cout << GR << "  Report generated at " << R << "csopesy-log.txt\n";
 }
 
-void Console::screenSession(const std::string& name, bool resume) {
-    std::shared_ptr<Process> proc;
+std::shared_ptr<Process> Console::findProcess(const std::string& name) const {
+    std::lock_guard<std::mutex> lk(registryMutex);
+    auto it = registry.find(name);
+    return it != registry.end() ? it->second : nullptr;
+}
+
+std::shared_ptr<Process> Console::getOrCreateProcess(const std::string& name) {
     {
         std::lock_guard<std::mutex> lk(registryMutex);
         auto it = registry.find(name);
-        if (it != registry.end()) proc = it->second;
+        if (it != registry.end()) return it->second;  // `screen -s` attaches to an existing name
     }
-
-    if (resume) {
-        // -r: must exist and must not already be finished
-        if (!proc || proc->isFinished()) {
-            std::cout << "Process " << name << " not found.\n";
-            return;
-        }
-    } else {
-        // -s: create if it doesn't exist yet
-        if (!proc) {
-            proc = generator->generate(name);
-            {
-                std::lock_guard<std::mutex> lk(registryMutex);
-                registry[name] = proc;
-            }
-            scheduler->addProcess(proc);
-        }
+    auto proc = generator->generate(name);
+    {
+        std::lock_guard<std::mutex> lk(registryMutex);
+        registry[name] = proc;
     }
-
-    // ── Attached sub-prompt ───────────────────────────────────────────────────
-    auto showInfo = [&]() {
-        std::cout << "\033[2J\033[H"; // clear screen
-        std::cout << B << WH << "Process name: " << R << proc->getName() << "\n"
-                  << B << WH << "ID: "           << R << proc->getPID()  << "\n\n";
-
-        std::cout << B << WH << "Logs:\n" << R;
-        for (const auto& entry : proc->getLogs())
-            std::cout << entry << "\n";
-        std::cout << "\n";
-
-        if (proc->isFinished()) {
-            std::cout << B << LG << "Finished!\n" << R;
-        } else {
-            std::cout << B << WH << "Current instruction line: " << R
-                      << proc->getCommandCounter() << "\n"
-                      << B << WH << "Lines of code: "            << R
-                      << proc->getTotalCommands()  << "\n";
-        }
-        std::cout << "\n";
-
-        // Full instruction listing (the process's program). The current line is localized by a
-        // colored, bracketed line number, e.g. [27]; other lines show a plain number. Keeps the
-        // spec's Logs/instruction-line fields above.
-        std::cout << B << WH << "Instructions:\n" << R;
-        auto listing = proc->getInstructionListing();
-        const int cur = proc->getCommandCounter(); // 1-based current line shown above
-        const int w   = static_cast<int>(std::to_string(listing.size()).size()) + 2; // room for [..]
-        for (std::size_t i = 0; i < listing.size(); ++i) {
-            const int  ln   = static_cast<int>(i + 1);
-            const bool here = (ln == cur);
-            const std::string label = here ? ("[" + std::to_string(ln) + "]")
-                                           : std::to_string(ln);
-            const std::string pad(std::max(0, w - static_cast<int>(label.size())), ' ');
-            if (here)
-                std::cout << pad << B << CY << label << ": " << listing[i] << R << "\n";
-            else
-                std::cout << pad << label << ": " << listing[i] << "\n";
-        }
-        std::cout << "\n";
-    };
-
-    showInfo();
-
-    std::string line;
-    while (true) {
-        std::cout << B << WH << "root:\\> " << R;
-        std::cout.flush();
-
-        if (!std::getline(std::cin, line)) break;
-
-        auto toks = tokenize(line);
-        if (toks.empty()) continue;
-
-        if (toks[0] == "exit") break;
-
-        if (toks[0] == "process-smi") {
-            showInfo();
-            continue;
-        }
-
-        std::cout << GR << "csosh: " << R
-                  << "command not found: " << YL << toks[0] << R << "\n";
-    }
+    scheduler->addProcess(proc);
+    return proc;
 }
 
 void Console::printProcessList(std::ostream& os, bool color) const {

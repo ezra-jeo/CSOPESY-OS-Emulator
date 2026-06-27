@@ -14,7 +14,10 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
         {"batch-process-freq", &batchProcessFreq},
         {"min-ins",            &minIns},
         {"max-ins",            &maxIns},
+        // The spec is inconsistent: its parameter table says "delays-per-exec" but its sample
+        // config / quiz write "delay-per-exec". Accept both spellings.
         {"delays-per-exec",    &delaysPerExec},
+        {"delay-per-exec",     &delaysPerExec},
     };
 
     std::ifstream file(path);
