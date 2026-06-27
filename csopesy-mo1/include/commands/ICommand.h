@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <cstdint>
 
 class Process; // forward-declared so execute() can take the owning PCB
 

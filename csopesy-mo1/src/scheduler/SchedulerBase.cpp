@@ -4,6 +4,11 @@
 #include <chrono>
 #include <thread>
 
+// Wall-clock duration of one CPU cycle (tick). Workers pace execution to this clock — each
+// instruction consumes (1 + delays-per-exec) cycles — so processes advance at an observable rate
+// even when delays-per-exec is 0. Also the unit for SLEEP ticks and batch-process-freq. Tunable.
+namespace { constexpr int CPU_CYCLE_MS = 10; }
+
 void SchedulerBase::addToWaiting(std::shared_ptr<Process> p, std::uint64_t wakeAtTick) {
     std::lock_guard<std::mutex> lk(waitingMutex);
     waitingList.push_back({wakeAtTick, std::move(p)});
@@ -30,7 +35,7 @@ void SchedulerBase::stopWatcher() {
 void SchedulerBase::watcherLoop() {
     using namespace std::chrono_literals;
     while (watcherRunning) {
-        std::this_thread::sleep_for(1ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(CPU_CYCLE_MS));
 
         // Free-running CPU clock (spec: `while(running) cpuCycles++`). Advancing the tick here —
         // rather than per executed instruction — keeps it moving even when every process is

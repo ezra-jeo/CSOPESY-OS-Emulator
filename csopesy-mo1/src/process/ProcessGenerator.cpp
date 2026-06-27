@@ -4,7 +4,6 @@
 #include "AddCommand.h"
 #include "SubtractCommand.h"
 #include "SleepCommand.h"
-#include "ForCommand.h"
 #include <random>
 #include <iomanip>
 #include <sstream>
@@ -27,53 +26,50 @@ Operand randOperand(std::mt19937& rng) {
     }
 }
 
-// Forward declaration so FOR can recurse.
-std::shared_ptr<ICommand> makeRandomCommand(
-    int pid, const std::string& name, std::mt19937& rng, int depth);
-
-// Generates a flat sub-body of 1–3 commands for a FOR block.
-std::vector<std::shared_ptr<ICommand>> makeBody(
+// Generates one random instruction as a FLAT list of leaf commands. A FOR is expanded here: its
+// body is generated once and then repeated `reps` times, so the repeated commands act as a real
+// loop (shared variables accumulate across iterations) and each iteration is a separate, counted,
+// logged, preemptible instruction. Recurses for nested FORs; FOR is excluded at depth >= 3 (cap).
+std::vector<std::shared_ptr<ICommand>> makeFlat(
     int pid, const std::string& name, std::mt19937& rng, int depth)
 {
-    std::uniform_int_distribution<int> bodyLen(1, 3);
-    int len = bodyLen(rng);
-    std::vector<std::shared_ptr<ICommand>> body;
-    body.reserve(len);
-    for (int i = 0; i < len; ++i)
-        body.push_back(makeRandomCommand(pid, name, rng, depth));
-    return body;
-}
-
-std::shared_ptr<ICommand> makeRandomCommand(
-    int pid, const std::string& name, std::mt19937& rng, int depth)
-{
-    // Available types at current depth; FOR is excluded at depth >= 3 (spec cap).
     const int maxType = (depth < 3) ? 6 : 5; // 0=PRINT 1=DECLARE 2=ADD 3=SUB 4=SLEEP 5=FOR
     std::uniform_int_distribution<int> typeDist(0, maxType - 1);
-    int type = typeDist(rng);
-
     std::uniform_int_distribution<int> vi(0, NVAR - 1);
+    int type = typeDist(rng);
 
     switch (type) {
     case 0: // PRINT
-        return std::make_shared<PrintCommand>(pid, "Hello world from " + name + "!");
+        return { std::make_shared<PrintCommand>(pid, "Hello world from " + name + "!") };
     case 1: { // DECLARE
         std::uniform_int_distribution<int> val(0, 65535);
-        return std::make_shared<DeclareCommand>(
-            pid, VARS[vi(rng)], static_cast<std::uint16_t>(val(rng)));
+        return { std::make_shared<DeclareCommand>(
+            pid, VARS[vi(rng)], static_cast<std::uint16_t>(val(rng))) };
     }
     case 2: // ADD
-        return std::make_shared<AddCommand>(pid, VARS[vi(rng)], randOperand(rng), randOperand(rng));
+        return { std::make_shared<AddCommand>(pid, VARS[vi(rng)], randOperand(rng), randOperand(rng)) };
     case 3: // SUBTRACT
-        return std::make_shared<SubtractCommand>(pid, VARS[vi(rng)], randOperand(rng), randOperand(rng));
+        return { std::make_shared<SubtractCommand>(pid, VARS[vi(rng)], randOperand(rng), randOperand(rng)) };
     case 4: { // SLEEP
-        std::uniform_int_distribution<int> ticks(1, 5); // small range to avoid long waits
-        return std::make_shared<SleepCommand>(pid, static_cast<std::uint8_t>(ticks(rng)));
+        std::uniform_int_distribution<int> ticks(1, 5);
+        return { std::make_shared<SleepCommand>(pid, static_cast<std::uint8_t>(ticks(rng))) };
     }
-    default: { // FOR (depth < 3)
+    default: { // FOR — build the body once, then emit it `reps` times (flattened)
         std::uniform_int_distribution<int> reps(1, 5);
-        return std::make_shared<ForCommand>(
-            pid, makeBody(pid, name, rng, depth + 1), reps(rng));
+        std::uniform_int_distribution<int> bodyLen(1, 3);
+        const int r  = reps(rng);
+        const int bl = bodyLen(rng);
+
+        std::vector<std::shared_ptr<ICommand>> body;
+        for (int i = 0; i < bl; ++i) {
+            auto sub = makeFlat(pid, name, rng, depth + 1);
+            body.insert(body.end(), sub.begin(), sub.end());
+        }
+        std::vector<std::shared_ptr<ICommand>> out;
+        out.reserve(body.size() * static_cast<std::size_t>(r));
+        for (int k = 0; k < r; ++k)
+            out.insert(out.end(), body.begin(), body.end());
+        return out;
     }
     }
 }
@@ -108,13 +104,16 @@ void ProcessGenerator::buildInstructions(Process& proc) {
 
     const int pid = proc.getPID();
     const std::string& name = proc.getName();
+
+    // Fill to exactly `count` instructions. FOR loops are flattened by makeFlat, so their
+    // body x repetitions count toward the limit individually; a final loop may be truncated.
     std::uint32_t ctr = 0;
-    
     while (ctr < count) {
-        auto cmd = makeRandomCommand(pid, name, rng, 0);
-        // Get the instruction count and increase the ctr. 
-        // Guard against exceeding, if using a for loop that exceeds the count, truncate for now.
-        
-        proc.addCommand(cmd);
+        auto flat = makeFlat(pid, name, rng, 0);
+        for (auto& c : flat) {
+            if (ctr >= count) break;
+            proc.addCommand(c);
+            ++ctr;
+        }
     }
 }
