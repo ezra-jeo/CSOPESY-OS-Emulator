@@ -83,8 +83,9 @@ main() ──> Console.run()  [main thread: the REPL]
   - Inside an attached screen: `process-smi` (refresh details + logs), `exit` (back to menu).
 - **`process-smi` view:** process name, ID, a **Logs:** block (PRINT output only, per spec), then
   `Current instruction line` / `Lines of code` (or `Finished!`), then an **Instructions:** listing —
-  the process's full program rendered as source (FOR shown with its body inline) with a `->` pointer
-  on the current line. `screen -r` on a missing/finished process prints `Process <name> not found.`
+  the process's full program rendered as source (FOR shown with its body inline) where the current
+  line is localized by a **colored, bracketed line number** (e.g. `[27]`). `screen -r` on a
+  missing/finished process prints `Process <name> not found.`
 
 ### `SystemConfig` (`SystemConfig.h/.cpp`) — config.txt
 - **Technical:** parses the 7 space-separated parameters and validates each against its range;
