@@ -49,20 +49,38 @@ void ProcessScreen::render() const {
     }
     std::cout << "\n";
 
-    // Full instruction listing; the current line is localized by a colored, bracketed number [N].
+    // Instruction listing — a window around the current line (full listings can be 1000s of lines).
+    // The current line is localized by a colored, bracketed number [N]; hidden lines above/below
+    // are summarized.
+    constexpr int CONTEXT = 10;  // lines shown on each side of the current line
     std::cout << B << WH << "Instructions:\n" << R;
     auto listing = proc->getInstructionListing();
-    const int cur = proc->getCommandCounter();
-    const int w   = static_cast<int>(std::to_string(listing.size()).size()) + 2; // room for [..]
-    for (std::size_t i = 0; i < listing.size(); ++i) {
-        const int  ln   = static_cast<int>(i + 1);
+    const int total = static_cast<int>(listing.size());
+    const int cur   = proc->getCommandCounter();
+    const int w     = static_cast<int>(std::to_string(total).size()) + 2; // room for [..]
+
+    int lo, hi;
+    if (cur <= 0) {                       // not started yet → show the top of the program
+        lo = 1;
+        hi = std::min(total, 2 * CONTEXT + 1);
+    } else {
+        lo = std::max(1, cur - CONTEXT);
+        hi = std::min(total, cur + CONTEXT);
+    }
+
+    if (lo > 1)
+        std::cout << GR << "       ... " << (lo - 1) << " more above\n" << R;
+    for (int ln = lo; ln <= hi; ++ln) {
+        const std::string& text = listing[ln - 1];
         const bool here = (ln == cur);
         const std::string label = here ? ("[" + std::to_string(ln) + "]") : std::to_string(ln);
         const std::string pad(std::max(0, w - static_cast<int>(label.size())), ' ');
         if (here)
-            std::cout << pad << B << CY << label << ": " << listing[i] << R << "\n";
+            std::cout << pad << B << CY << label << ": " << text << R << "\n";
         else
-            std::cout << pad << label << ": " << listing[i] << "\n";
+            std::cout << pad << label << ": " << text << "\n";
     }
+    if (hi < total)
+        std::cout << GR << "       ... " << (total - hi) << " more below\n" << R;
     std::cout << "\n";
 }
