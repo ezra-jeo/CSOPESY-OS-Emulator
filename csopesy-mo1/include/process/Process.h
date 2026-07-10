@@ -52,6 +52,14 @@ public:
     // Used by process-smi to show the program with a pointer at the current line.
     std::vector<std::string> getInstructionListing() const;
 
+    // --- Memory manager bookkeeping (first-fit flat allocator) ---
+    // A process keeps its memory block from first dispatch until it finishes;
+    // preemption at the end of a quantum does NOT release it.
+    void          setMemory(std::uint64_t base, std::uint64_t size);
+    bool          hasMemory()      const;
+    std::uint64_t getBaseAddress() const;
+    std::uint64_t getMemSize()     const;
+
 private:
     int          pid;
     std::string  name;
@@ -68,4 +76,8 @@ private:
 
     std::vector<std::string> logs;
     mutable std::mutex       logMutex;
+
+    bool          memAllocated = false;
+    std::uint64_t baseAddress  = 0;
+    std::uint64_t memSize      = 0;
 };

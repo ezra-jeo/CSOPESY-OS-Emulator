@@ -7,7 +7,25 @@
 // Wall-clock duration of one CPU cycle (tick). Workers pace execution to this clock — each
 // instruction consumes (1 + delays-per-exec) cycles — so processes advance at an observable rate
 // even when delays-per-exec is 0. Also the unit for SLEEP ticks and batch-process-freq. Tunable.
-namespace { constexpr int CPU_CYCLE_MS = 200; }
+namespace {
+    constexpr int         CPU_CYCLE_MS    = 200;
+    constexpr const char* MEMORY_STAMP_DIR = "memory_stamps";
+}
+
+SchedulerBase::SchedulerBase(MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
+    : memory(memory), memPerProc(memPerProc), quantumCycles(quantumCycles) {}
+
+bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {
+    if (p->hasMemory()) return true;
+    auto base = memory.allocate(memPerProc, p->getName());
+    if (!base) return false;
+    p->setMemory(*base, memPerProc);
+    return true;
+}
+
+void SchedulerBase::releaseMemory(const std::shared_ptr<Process>& p) {
+    memory.deallocate(p->getName());
+}
 
 void SchedulerBase::addToWaiting(std::shared_ptr<Process> p, std::uint64_t wakeAtTick) {
     std::lock_guard<std::mutex> lk(waitingMutex);
@@ -57,6 +75,12 @@ void SchedulerBase::watcherLoop() {
         for (auto& p : toWake) {
             p->setState(Process::READY);
             requeueReady(std::move(p));
+        }
+
+        // For every quantum-cycles CPU ticks, snapshot the memory map to memory_stamp_<qq>.txt.
+        if (++ticksSinceSnapshot >= quantumCycles) {
+            ticksSinceSnapshot = 0;
+            memory.writeSnapshot(++quantumSnapshotIndex, MEMORY_STAMP_DIR);
         }
     }
 }

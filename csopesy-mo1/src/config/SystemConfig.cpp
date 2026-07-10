@@ -20,6 +20,13 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
         {"delay-per-exec",     &delaysPerExec},
     };
 
+    // First-fit memory allocator parameters — byte counts, so 64-bit.
+    const std::unordered_map<std::string, uint64_t*> numericFields64 = {
+        {"max-overall-mem", &maxOverallMem},
+        {"mem-per-frame",   &memPerFrame},
+        {"mem-per-proc",    &memPerProc},
+    };
+
     std::ifstream file(path);
     if (!file) {
         err = "Cannot open config file: " + path;
@@ -49,6 +56,8 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
                 scheduler = it->second;
             } else if (key == "num-cpu") {
                 numCpu = static_cast<std::int32_t>(std::stoi(value));
+            } else if (auto it64 = numericFields64.find(key); it64 != numericFields64.end()) {
+                *it64->second = static_cast<uint64_t>(std::stoull(value));
             } else {
                 auto it = numericFields.find(key);
                 if (it == numericFields.end()) {
@@ -92,5 +101,18 @@ bool SystemConfig::validate(std::string& err) const {
         return false;
     }
     // delaysPerExec: [0, 2^32-1] is the full uint32_t range, no check needed
+    if (memPerFrame < 1) {
+        err = "mem-per-frame must be >= 1";
+        return false;
+    }
+    if (memPerProc < 1) {
+        err = "mem-per-proc must be >= 1";
+        return false;
+    }
+    if (memPerProc > maxOverallMem) {
+        err = "mem-per-proc (" + std::to_string(memPerProc) + ") must be <= max-overall-mem ("
+            + std::to_string(maxOverallMem) + ")";
+        return false;
+    }
     return true;
 }

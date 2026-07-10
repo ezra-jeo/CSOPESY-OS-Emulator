@@ -79,3 +79,13 @@ std::vector<std::string> Process::getInstructionListing() const {
         out.push_back(cmd->toString());
     return out;
 }
+
+void Process::setMemory(std::uint64_t base, std::uint64_t size) {
+    baseAddress  = base;
+    memSize      = size;
+    memAllocated = true;
+}
+
+bool          Process::hasMemory()      const { return memAllocated; }
+std::uint64_t Process::getBaseAddress() const { return baseAddress; }
+std::uint64_t Process::getMemSize()     const { return memSize; }

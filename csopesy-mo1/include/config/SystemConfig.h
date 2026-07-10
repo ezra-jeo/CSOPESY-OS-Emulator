@@ -14,6 +14,9 @@
 //   min-ins 1000
 //   max-ins 2000
 //   delays-per-exec 0
+//   max-overall-mem 16384
+//   mem-per-frame 16
+//   mem-per-proc 4096
 struct SystemConfig {
     enum class Scheduler { FCFS, RR };
 
@@ -25,6 +28,11 @@ struct SystemConfig {
     std::uint32_t minIns          = 1;       // [1, 2^32-1]
     std::uint32_t maxIns          = 1;       // [1, 2^32-1]; must be >= minIns
     std::uint32_t delaysPerExec   = 0;       // [0, 2^32-1]; 0 = one instruction per tick
+
+    // First-fit flat memory allocator (lecture: "Emulating a first-fit flat memory model").
+    std::uint64_t maxOverallMem   = 16384;   // total main memory in bytes; >= memPerProc
+    std::uint64_t memPerFrame     = 16;      // bytes per frame; >= 1
+    std::uint64_t memPerProc      = 4096;    // fixed per-process footprint; >= 1
 
     // Parses `path`, validating every parameter against its allowed range.
     // Returns true on success; on failure returns false and fills `err` with a

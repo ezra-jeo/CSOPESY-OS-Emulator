@@ -1,8 +1,12 @@
 #include "RRScheduler.h"
 #include "CPUWorker.h"
+#include <chrono>
+#include <thread>
 
-RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec)
-    : numCores(numCores), quantumCycles(quantumCycles), delaysPerExec(delaysPerExec) {
+RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec,
+                          MemoryManager& memory, std::uint64_t memPerProc)
+    : SchedulerBase(memory, memPerProc, quantumCycles),
+      numCores(numCores), quantumCycles(quantumCycles), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)
         workers.push_back(std::make_unique<CPUWorker>(i, *this, quantumCycles, delaysPerExec));
@@ -51,6 +55,8 @@ void RRScheduler::stop() {
 }
 
 void RRScheduler::moveToFinished(std::shared_ptr<Process> p) {
+    // Memory is only released once the process finishes execution, never on quantum preemption.
+    releaseMemory(p);
     std::lock_guard<std::mutex> lock(finishedMutex);
     finishedList.push_back(p);
 }
@@ -99,10 +105,27 @@ void RRScheduler::schedulerLoop() {
             if (w->isIdle()) { idle = w.get(); break; }
         if (!idle) continue; // spurious wake
 
-        auto proc = readyQueue.front();
-        readyQueue.pop();
-        lock.unlock();
+        // Scan up to one full pass of the ready queue for a process that already holds
+        // memory (a preempted resident) or can acquire memPerProc bytes right now. Anything
+        // that fails is pushed to the tail — "if memory is full when a process is scheduled,
+        // it reverts to the tail of the ready queue".
+        std::shared_ptr<Process> proc;
+        for (std::size_t attempts = readyQueue.size(); attempts > 0; --attempts) {
+            auto candidate = readyQueue.front();
+            readyQueue.pop();
+            if (acquireMemory(candidate)) { proc = candidate; break; }
+            readyQueue.push(candidate);
+        }
 
+        if (!proc) {
+            // Nobody in the queue can get memory right now; avoid busy-spinning the scheduler
+            // thread until a process finishes and frees a block.
+            lock.unlock();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
+
+        lock.unlock();
         idle->assign(proc);
     }
 }

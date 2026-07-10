@@ -129,6 +129,29 @@ one un-preemptible step under quantum 20 — see Known Limitations).
 
 ---
 
+## Test Case 7 — First-Fit Flat Memory Allocator (Memory Management Activity)
+
+**Config (`tc7_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 100 instructions (min=max) ·
+delay-per-exec 0 · max-overall-mem 16384 · mem-per-frame 16 · mem-per-proc 4096 (fixed per process).
+
+**Sequence:**
+1. `initialize`
+2. `scheduler-start`
+3. wait 5 seconds
+4. `scheduler-stop`
+5. `screen -ls` every 2 seconds until all processes reach Finished, or >1 minute elapses
+6. `exit`
+
+**Expected:** at most 4 processes resident in memory at once (16384 / 4096); a process that can't
+get a free 4096-byte block when it's its turn reverts to the tail of the ready queue instead of
+running; a process keeps its memory block across quantum preemptions and only releases it on
+finish; several processes finish over the run. Every `quantum-cycles` CPU ticks, `memory_stamps/`
+gets a new `memory_stamp_<qq>.txt` with the timestamp, resident process count, external
+fragmentation in bytes, and a top-down ASCII map of occupied blocks between `----end----` and
+`----start-----`.
+
+---
+
 ## Known Limitations
 
 | Item | Behaviour | Reason |

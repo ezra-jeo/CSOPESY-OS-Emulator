@@ -1,5 +1,6 @@
 #pragma once
 #include "IScheduler.h"
+#include "MemoryManager.h"
 #include "SystemConfig.h"
 #include "ProcessGenerator.h"
 #include "Process.h"
@@ -44,6 +45,7 @@ private:
     bool         initialized = false;
     SystemConfig config;
 
+    std::unique_ptr<MemoryManager>    memory;
     std::unique_ptr<IScheduler>       scheduler;
     std::unique_ptr<ProcessGenerator> generator;
 

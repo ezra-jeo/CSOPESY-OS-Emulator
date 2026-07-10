@@ -30,6 +30,8 @@ set(SOURCES
     src/scheduler/RRScheduler.cpp
     # ── Config ───────────────────────────────────────────────────────────────
     src/config/SystemConfig.cpp
+    # ── Memory (first-fit flat allocator) ─────────────────────────────────────
+    src/memory/MemoryManager.cpp
 )
 
 add_executable(csopesy ${SOURCES})
@@ -43,6 +45,7 @@ set(INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/process
     ${CMAKE_CURRENT_SOURCE_DIR}/include/scheduler
     ${CMAKE_CURRENT_SOURCE_DIR}/include/config
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/memory
 )
 if(MSVC)
     target_include_directories(csopesy PRIVATE ${INCLUDE_DIRS})

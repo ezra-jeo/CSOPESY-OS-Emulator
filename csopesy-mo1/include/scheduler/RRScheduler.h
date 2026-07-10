@@ -17,7 +17,8 @@ class CPUWorker; // forward declaration
 // and call back via requeue() to push the process to the tail of the ready queue.
 class RRScheduler : public SchedulerBase {
 public:
-    RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec = 0);
+    RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec,
+                MemoryManager& memory, std::uint64_t memPerProc);
     ~RRScheduler() override;
 
     void addProcess(std::shared_ptr<Process> p) override;

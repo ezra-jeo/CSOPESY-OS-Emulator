@@ -1,5 +1,6 @@
 #pragma once
 #include "IScheduler.h"
+#include "MemoryManager.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -8,15 +9,28 @@
 #include <vector>
 
 // Intermediate base class shared by FCFSScheduler and RRScheduler.
-// Provides the CPU tick counter, waiting list, and a watcher thread that
-// re-admits sleeping processes once their tick expiry is reached.
+// Provides the CPU tick counter, waiting list, a watcher thread that re-admits sleeping
+// processes once their tick expiry is reached, and the first-fit memory allocator hooks
+// (acquireMemory/releaseMemory) both scheduling policies dispatch through.
 class SchedulerBase : public IScheduler {
+public:
+    SchedulerBase(MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
+
 protected:
     void startWatcher();
     void stopWatcher();
 
     // Subclass pushes p to its own ready queue and notifies its scheduler CV.
     virtual void requeueReady(std::shared_ptr<Process> p) = 0;
+
+    // Secures memPerProc bytes for p (no-op if p already holds memory from an earlier
+    // quantum). Returns false if the memory manager has no block large enough right now —
+    // the caller should push p back onto the tail of its ready queue and try another candidate
+    // ("if memory is full when a process is scheduled, it reverts to the tail of the queue").
+    bool acquireMemory(const std::shared_ptr<Process>& p);
+
+    // Releases p's memory block. Call once, when p finishes (not on quantum preemption).
+    void releaseMemory(const std::shared_ptr<Process>& p);
 
 public:
     void          addToWaiting(std::shared_ptr<Process> p, std::uint64_t wakeAtTick) override;
@@ -34,4 +48,10 @@ private:
 
     std::atomic<bool> watcherRunning{false};
     std::thread       watcherThread;
+
+    MemoryManager& memory;
+    std::uint64_t  memPerProc;
+    std::uint32_t  quantumCycles;      // also the memory-snapshot cadence, in CPU ticks
+    int            quantumSnapshotIndex = 0;
+    std::uint32_t  ticksSinceSnapshot   = 0;
 };

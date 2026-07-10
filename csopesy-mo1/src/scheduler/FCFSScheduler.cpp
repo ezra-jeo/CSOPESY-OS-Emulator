@@ -1,8 +1,12 @@
 #include "FCFSScheduler.h"
 #include "CPUWorker.h"
+#include <chrono>
+#include <thread>
 
-FCFSScheduler::FCFSScheduler(int numCores, std::uint32_t delaysPerExec)
-    : numCores(numCores), delaysPerExec(delaysPerExec) {
+FCFSScheduler::FCFSScheduler(int numCores, std::uint32_t delaysPerExec,
+                              MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
+    : SchedulerBase(memory, memPerProc, quantumCycles),
+      numCores(numCores), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)
         workers.push_back(std::make_unique<CPUWorker>(i, *this, /*quantum=*/0, delaysPerExec));
@@ -46,6 +50,8 @@ void FCFSScheduler::stop() {
 }
 
 void FCFSScheduler::moveToFinished(std::shared_ptr<Process> p) {
+    // Memory is only released once the process finishes execution.
+    releaseMemory(p);
     std::lock_guard<std::mutex> lock(finishedMutex);
     finishedList.push_back(p);
 }
@@ -96,11 +102,24 @@ void FCFSScheduler::schedulerLoop() {
             if (w->isIdle()) { idle = w.get(); break; }
         if (!idle) continue; // spurious wake
 
-        // Pop the front — FCFS means arrival order, never sorted
-        auto proc = readyQueue.front();
-        readyQueue.pop();
-        lock.unlock(); // release before assign() to avoid holding two locks at once
+        // Pop the front — FCFS means arrival order, never sorted — but skip (revert to tail)
+        // anything that can't secure memPerProc bytes right now ("if memory is full when a
+        // process is scheduled, it reverts to the tail of the ready queue").
+        std::shared_ptr<Process> proc;
+        for (std::size_t attempts = readyQueue.size(); attempts > 0; --attempts) {
+            auto candidate = readyQueue.front();
+            readyQueue.pop();
+            if (acquireMemory(candidate)) { proc = candidate; break; }
+            readyQueue.push(candidate);
+        }
 
+        if (!proc) {
+            lock.unlock();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // avoid busy-spin while full
+            continue;
+        }
+
+        lock.unlock(); // release before assign() to avoid holding two locks at once
         idle->assign(proc);
     }
 }

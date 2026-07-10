@@ -17,7 +17,8 @@ class CPUWorker; // forward declaration — avoids circular include with CPUWork
 // Ready queue = FIFO; arrival order is preserved by always pushing to the back.
 class FCFSScheduler : public SchedulerBase {
 public:
-    FCFSScheduler(int numCores, std::uint32_t delaysPerExec = 0);
+    FCFSScheduler(int numCores, std::uint32_t delaysPerExec,
+                  MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
     ~FCFSScheduler() override;
 
     void addProcess(std::shared_ptr<Process> p) override;
