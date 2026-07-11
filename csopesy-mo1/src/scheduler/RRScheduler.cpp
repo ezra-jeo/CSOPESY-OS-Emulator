@@ -91,14 +91,18 @@ void RRScheduler::schedulerLoop() {
     while (true) {
         std::unique_lock<std::mutex> lock(queueMutex);
         schedulerCv.wait(lock, [&] {
+            if (!running) return true; // shutdown: stop waiting immediately, don't drain the queue
             bool hasWork     = !readyQueue.empty();
             bool hasFreeCore = false;
             for (auto& w : workers)
                 if (w->isIdle()) { hasFreeCore = true; break; }
-            return (!running && !hasWork) || (hasWork && hasFreeCore);
+            return hasWork && hasFreeCore;
         });
 
-        if (!running && readyQueue.empty()) break;
+        // stop() must be able to close the emulator promptly even with a large backlog of
+        // memory-starved processes still queued (e.g. batch generation outpacing available
+        // memory slots) — exit abandons anything not already dispatched to a core.
+        if (!running) break;
 
         CPUWorker* idle = nullptr;
         for (auto& w : workers)

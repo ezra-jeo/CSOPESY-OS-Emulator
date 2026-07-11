@@ -84,17 +84,21 @@ int FCFSScheduler::getActiveCores() const {
 
 void FCFSScheduler::schedulerLoop() {
     while (true) {
-        // Wait until there is work AND a free core, or until shutdown with empty queue.
+        // Wait until there is work AND a free core, or until shutdown.
         std::unique_lock<std::mutex> lock(queueMutex);
         schedulerCv.wait(lock, [&] {
+            if (!running) return true; // shutdown: stop waiting immediately, don't drain the queue
             bool hasWork     = !readyQueue.empty();
             bool hasFreeCore = false;
             for (auto& w : workers)
                 if (w->isIdle()) { hasFreeCore = true; break; }
-            return (!running && !hasWork) || (hasWork && hasFreeCore);
+            return hasWork && hasFreeCore;
         });
 
-        if (!running && readyQueue.empty()) break;
+        // stop() must be able to close the emulator promptly even with a large backlog of
+        // memory-starved processes still queued — exit abandons anything not already
+        // dispatched to a core.
+        if (!running) break;
 
         // Find first idle worker
         CPUWorker* idle = nullptr;
