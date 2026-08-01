@@ -19,6 +19,20 @@ namespace {
 static const std::string VARS[] = { "x", "y", "z", "a", "b" };
 static const int NVAR = 5;
 
+// Single shared engine for the whole translation unit (generate(), buildInstructions(),
+// makeFlat(), rollMemSize() all draw from this one instance).
+static std::mt19937 rng(std::random_device{}());
+
+// Rolls a uniformly-random power-of-two size in [cfg.minMemPerProc, cfg.maxMemPerProc].
+// Both bounds are already guaranteed valid powers of two by SystemConfig::validate().
+std::uint64_t rollMemSize(const SystemConfig& cfg, std::mt19937& rng) {
+    std::vector<std::uint64_t> candidates;
+    for (std::uint64_t v = cfg.minMemPerProc; v <= cfg.maxMemPerProc; v *= 2)
+        candidates.push_back(v);
+    std::uniform_int_distribution<std::size_t> dist(0, candidates.size() - 1);
+    return candidates[dist(rng)];
+}
+
 // Returns a random operand: 50% chance of literal [0, 65535], else a var from the pool.
 Operand randOperand(std::mt19937& rng) {
     std::uniform_int_distribution<int> coin(0, 1);
@@ -35,10 +49,14 @@ Operand randOperand(std::mt19937& rng) {
 // body is generated once and then repeated `reps` times, so the repeated commands act as a real
 // loop (shared variables accumulate across iterations) and each iteration is a separate, counted,
 // logged, preemptible instruction. Recurses for nested FORs; FOR is excluded at depth >= 3 (cap).
+// `memSize` is the OWNING process's address space size (unchanged across recursion levels — it
+// describes the process, not the recursion depth) and bounds READ/WRITE's address operand to
+// [0, memSize-2] so randomly-generated batch/screen-s processes exercise real page faults without
+// ever hitting a spurious access violation (violations stay a deliberate, screen -c-only scenario).
 std::vector<std::shared_ptr<ICommand>> makeFlat(
-    int pid, const std::string& name, std::mt19937& rng, int depth)
+    int pid, const std::string& name, std::mt19937& rng, int depth, std::uint64_t memSize)
 {
-    const int maxType = (depth < 3) ? 6 : 5; // 0=PRINT 1=DECLARE 2=ADD 3=SUB 4=SLEEP 5=FOR
+    const int maxType = (depth < 3) ? 8 : 7; // 0=PRINT 1=DECLARE 2=ADD 3=SUB 4=SLEEP 5=READ 6=WRITE 7=FOR
     std::uniform_int_distribution<int> typeDist(0, maxType - 1);
     std::uniform_int_distribution<int> vi(0, NVAR - 1);
     int type = typeDist(rng);
@@ -59,7 +77,19 @@ std::vector<std::shared_ptr<ICommand>> makeFlat(
         std::uniform_int_distribution<int> ticks(1, 5);
         return { std::make_shared<SleepCommand>(pid, static_cast<std::uint8_t>(ticks(rng))) };
     }
-    default: { // FOR — build the body, construct a ForCommand, then flatten with iteration tags
+    case 5: { // READ
+        if (memSize < 2) return { std::make_shared<DeclareCommand>(pid, VARS[vi(rng)], 0) };
+        std::uniform_int_distribution<int> addrDist(0, static_cast<int>(memSize) - 2);
+        std::uint16_t addr = static_cast<std::uint16_t>(addrDist(rng));
+        return { std::make_shared<ReadCommand>(pid, VARS[vi(rng)], addr) };
+    }
+    case 6: { // WRITE
+        if (memSize < 2) return { std::make_shared<DeclareCommand>(pid, VARS[vi(rng)], 0) };
+        std::uniform_int_distribution<int> addrDist(0, static_cast<int>(memSize) - 2);
+        std::uint16_t addr = static_cast<std::uint16_t>(addrDist(rng));
+        return { std::make_shared<WriteCommand>(pid, addr, randOperand(rng)) };
+    }
+    case 7: { // FOR — build the body, construct a ForCommand, then flatten with iteration tags
         std::uniform_int_distribution<int> reps(1, 5);
         std::uniform_int_distribution<int> bodyLen(1, 3);
         const int r  = reps(rng);
@@ -67,13 +97,15 @@ std::vector<std::shared_ptr<ICommand>> makeFlat(
 
         std::vector<std::shared_ptr<ICommand>> body;
         for (int i = 0; i < bl; ++i) {
-            auto sub = makeFlat(pid, name, rng, depth + 1);
+            auto sub = makeFlat(pid, name, rng, depth + 1, memSize);
             body.insert(body.end(), sub.begin(), sub.end());
         }
         // ForCommand encapsulates the loop structure; flatten() emits body×r annotated leaves
         // (e.g. "ADD(x,y,1)  [FOR i=2/3]") without storing the ForCommand in the commandList.
         return ForCommand(pid, std::move(body), r).flatten();
     }
+    default:
+        return { std::make_shared<PrintCommand>(pid, "Hello world from " + name + "!") };
     }
 }
 
@@ -173,14 +205,18 @@ std::shared_ptr<Process> ProcessGenerator::generate() {
     std::ostringstream oss;
     oss << "p" << std::setw(2) << std::setfill('0') << pid;
     auto proc = std::make_shared<Process>(pid, oss.str());
-    buildInstructions(*proc);
+    std::uint64_t size = rollMemSize(cfg, rng);
+    proc->setRequestedMemSize(size);
+    buildInstructions(*proc, size);
     return proc;
 }
 
 std::shared_ptr<Process> ProcessGenerator::generate(const std::string& name) {
     const int pid = nextPid++;
     auto proc = std::make_shared<Process>(pid, name);
-    buildInstructions(*proc);
+    std::uint64_t size = rollMemSize(cfg, rng);
+    proc->setRequestedMemSize(size);
+    buildInstructions(*proc, size);
     return proc;
 }
 
@@ -263,9 +299,7 @@ bool ProcessGenerator::buildFromInstructionText(Process& proc, const std::string
     return true;
 }
 
-void ProcessGenerator::buildInstructions(Process& proc) {
-    static std::mt19937 rng(std::random_device{}());
-
+void ProcessGenerator::buildInstructions(Process& proc, std::uint64_t memSize) {
     const std::uint32_t lo = cfg.minIns;
     const std::uint32_t hi = (cfg.maxIns >= lo) ? cfg.maxIns : lo;
     std::uniform_int_distribution<std::uint32_t> countDist(lo, hi);
@@ -278,7 +312,7 @@ void ProcessGenerator::buildInstructions(Process& proc) {
     // body x repetitions count toward the limit individually; a final loop may be truncated.
     std::uint32_t ctr = 0;
     while (ctr < count) {
-        auto flat = makeFlat(pid, name, rng, 0);
+        auto flat = makeFlat(pid, name, rng, 0, memSize);
         for (auto& c : flat) {
             if (ctr >= count) break;
             proc.addCommand(c);

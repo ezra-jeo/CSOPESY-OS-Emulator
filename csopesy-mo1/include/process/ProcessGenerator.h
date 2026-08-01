@@ -32,7 +32,7 @@ public:
     bool buildFromInstructionText(Process& proc, const std::string& text, std::string& err);
 
 private:
-    void buildInstructions(Process& proc);
+    void buildInstructions(Process& proc, std::uint64_t memSize);
 
     const SystemConfig& cfg;
     int nextPid = 1;
