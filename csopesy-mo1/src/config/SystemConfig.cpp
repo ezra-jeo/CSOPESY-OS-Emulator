@@ -22,9 +22,11 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
 
     // First-fit memory allocator parameters — byte counts, so 64-bit.
     const std::unordered_map<std::string, uint64_t*> numericFields64 = {
-        {"max-overall-mem", &maxOverallMem},
-        {"mem-per-frame",   &memPerFrame},
-        {"mem-per-proc",    &memPerProc},
+        {"max-overall-mem",   &maxOverallMem},
+        {"mem-per-frame",     &memPerFrame},
+        {"mem-per-proc",      &memPerProc},
+        {"min-mem-per-proc",  &minMemPerProc},
+        {"max-mem-per-proc",  &maxMemPerProc},
     };
 
     std::ifstream file(path);
@@ -58,6 +60,8 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
                 numCpu = static_cast<std::int32_t>(std::stoi(value));
             } else if (auto it64 = numericFields64.find(key); it64 != numericFields64.end()) {
                 *it64->second = static_cast<uint64_t>(std::stoull(value));
+                if (key == "min-mem-per-proc" || key == "max-mem-per-proc")
+                    sawMinMaxMemPerProc = true;
             } else {
                 auto it = numericFields.find(key);
                 if (it == numericFields.end()) {
@@ -74,6 +78,27 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
 
     return validate(err);
 }
+
+namespace {
+
+bool isPowerOfTwo(std::uint64_t value) {
+    return value != 0 && (value & (value - 1)) == 0;
+}
+
+// All memory-size parameters share the spec's [2^6, 2^16] power-of-2 constraint.
+bool validateMemSize(const std::string& key, std::uint64_t value, std::string& err) {
+    if (!isPowerOfTwo(value)) {
+        err = key + " must be a power of 2, got " + std::to_string(value);
+        return false;
+    }
+    if (value < 64 || value > 65536) {
+        err = key + " must be in [64, 65536], got " + std::to_string(value);
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
 
 bool SystemConfig::validate(std::string& err) const {
     if (numCpu < 1 || numCpu > 128) {
@@ -101,12 +126,19 @@ bool SystemConfig::validate(std::string& err) const {
         return false;
     }
     // delaysPerExec: [0, 2^32-1] is the full uint32_t range, no check needed
-    if (memPerFrame < 1) {
-        err = "mem-per-frame must be >= 1";
-        return false;
-    }
-    if (memPerProc < 1) {
-        err = "mem-per-proc must be >= 1";
+
+    // Spec: "All memory ranges are [2^6, 2^16] and the power of 2 format." Applies to every
+    // memory-size parameter. min/max-mem-per-proc default to valid values (64, 4096) so a
+    // legacy MO1-only config that never mentions them still validates cleanly.
+    if (!validateMemSize("max-overall-mem", maxOverallMem, err)) return false;
+    if (!validateMemSize("mem-per-frame", memPerFrame, err)) return false;
+    if (!validateMemSize("mem-per-proc", memPerProc, err)) return false;
+    if (!validateMemSize("min-mem-per-proc", minMemPerProc, err)) return false;
+    if (!validateMemSize("max-mem-per-proc", maxMemPerProc, err)) return false;
+
+    if (minMemPerProc > maxMemPerProc) {
+        err = "min-mem-per-proc (" + std::to_string(minMemPerProc) + ") must be <= max-mem-per-proc ("
+            + std::to_string(maxMemPerProc) + ")";
         return false;
     }
     if (memPerProc > maxOverallMem) {

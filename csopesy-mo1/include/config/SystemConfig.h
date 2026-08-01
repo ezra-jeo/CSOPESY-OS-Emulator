@@ -17,6 +17,8 @@
 //   max-overall-mem 16384
 //   mem-per-frame 16
 //   mem-per-proc 4096
+//   min-mem-per-proc 64
+//   max-mem-per-proc 4096
 struct SystemConfig {
     enum class Scheduler { FCFS, RR };
 
@@ -33,6 +35,17 @@ struct SystemConfig {
     std::uint64_t maxOverallMem   = 16384;   // total main memory in bytes; >= memPerProc
     std::uint64_t memPerFrame     = 16;      // bytes per frame; >= 1
     std::uint64_t memPerProc      = 4096;    // fixed per-process footprint; >= 1
+
+    // MO2 demand-paging process sizing: scheduler_start rolls each new process's footprint
+    // from [minMemPerProc, maxMemPerProc] instead of the fixed legacy memPerProc. Both must be
+    // powers of two in [2^6, 2^16] (see validate()).
+    std::uint64_t minMemPerProc   = 64;      // lower bound on a scheduler_start process's size
+    std::uint64_t maxMemPerProc   = 4096;    // upper bound on a scheduler_start process's size
+
+    // True once load() has seen either min-mem-per-proc or max-mem-per-proc in config.txt.
+    // Later steps use this to pick the allocator: demand paging when set, flat first-fit
+    // (keyed off the legacy memPerProc) when the config never mentions the MO2 keys.
+    bool sawMinMaxMemPerProc = false;
 
     // Parses `path`, validating every parameter against its allowed range.
     // Returns true on success; on failure returns false and fills `err` with a
