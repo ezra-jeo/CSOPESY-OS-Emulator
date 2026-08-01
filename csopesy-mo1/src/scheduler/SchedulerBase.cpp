@@ -20,6 +20,7 @@ bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {
     auto base = memory.allocate(memPerProc, p->getName());
     if (!base) return false;
     p->setMemory(*base, memPerProc);
+    p->bindMemory(memPerProc, memPerProc, /*demandPaged=*/false);
     return true;
 }
 
