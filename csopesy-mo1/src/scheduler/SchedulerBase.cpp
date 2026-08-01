@@ -39,6 +39,18 @@ std::uint64_t SchedulerBase::getCpuTick() const {
     return cpuTick.load(std::memory_order_relaxed);
 }
 
+std::uint64_t SchedulerBase::getIdleTicks() const {
+    return idleTicks.load(std::memory_order_relaxed);
+}
+
+std::uint64_t SchedulerBase::getActiveTicks() const {
+    return activeTicks.load(std::memory_order_relaxed);
+}
+
+std::uint64_t SchedulerBase::getTotalTicks() const {
+    return totalTicks.load(std::memory_order_relaxed);
+}
+
 void SchedulerBase::startWatcher() {
     watcherRunning = true;
     watcherThread = std::thread(&SchedulerBase::watcherLoop, this);
@@ -59,6 +71,15 @@ void SchedulerBase::watcherLoop() {
         // sleeping or the ready queue is momentarily empty, so SLEEP timers and tick-driven batch
         // generation can never stall the system.
         incrementTick();
+
+        // getNumCores()/getActiveCores() are pure virtuals from IScheduler; watcherLoop runs on a
+        // fully-constructed FCFSScheduler/RRScheduler (the watcher thread only starts inside
+        // start()), so these ordinary virtual calls correctly dispatch to the concrete override.
+        int total  = getNumCores();
+        int active = getActiveCores();
+        activeTicks.fetch_add(static_cast<std::uint64_t>(active), std::memory_order_relaxed);
+        idleTicks.fetch_add(static_cast<std::uint64_t>(total - active), std::memory_order_relaxed);
+        totalTicks.fetch_add(static_cast<std::uint64_t>(total), std::memory_order_relaxed);
 
         std::vector<std::shared_ptr<Process>> toWake;
         {

@@ -37,10 +37,19 @@ public:
     void          incrementTick()    override;
     std::uint64_t getCpuTick() const override;
 
+    std::uint64_t getIdleTicks()   const override;
+    std::uint64_t getActiveTicks() const override;
+    std::uint64_t getTotalTicks()  const override;
+
 private:
     void watcherLoop();
 
     std::atomic<std::uint64_t> cpuTick{0};
+
+    // vmstat tick accounting (see IScheduler::getIdleTicks/getActiveTicks/getTotalTicks).
+    std::atomic<std::uint64_t> idleTicks{0};
+    std::atomic<std::uint64_t> activeTicks{0};
+    std::atomic<std::uint64_t> totalTicks{0};
 
     struct WaitEntry { std::uint64_t wakeAt; std::shared_ptr<Process> proc; };
     std::vector<WaitEntry> waitingList;

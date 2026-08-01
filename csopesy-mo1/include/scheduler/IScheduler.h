@@ -35,4 +35,11 @@ public:
     virtual std::vector<std::shared_ptr<Process>> getFinishedProcesses() const = 0;
     virtual int getNumCores()    const = 0;
     virtual int getActiveCores() const = 0;
+
+    // Cumulative CPU-tick accounting for vmstat: every watcher tick adds getNumCores() to
+    // totalTicks and splits it between idleTicks/activeTicks by that tick's getActiveCores(), so
+    // totalTicks == idleTicks + activeTicks always holds.
+    virtual std::uint64_t getIdleTicks()   const = 0;
+    virtual std::uint64_t getActiveTicks() const = 0;
+    virtual std::uint64_t getTotalTicks()  const = 0;
 };
