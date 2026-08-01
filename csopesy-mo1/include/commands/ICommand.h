@@ -12,7 +12,7 @@ class Process; // forward-declared so execute() can take the owning PCB
 class ICommand {
 public:
     // PRINT/IO exist in the seeded FCFS base. The remaining types are MO1 additions.
-    enum CommandType { IO, PRINT, DECLARE, ADD, SUBTRACT, SLEEP, FOR };
+    enum CommandType { IO, PRINT, DECLARE, ADD, SUBTRACT, SLEEP, FOR, READ, WRITE };
 
     ICommand(int pid, CommandType commandType);
     CommandType getCommandType();

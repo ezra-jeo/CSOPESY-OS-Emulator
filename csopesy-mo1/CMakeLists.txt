@@ -15,6 +15,8 @@ set(SOURCES
     src/commands/SleepCommand.cpp
     src/commands/ForCommand.cpp
     src/commands/Operand.cpp
+    src/commands/ReadCommand.cpp
+    src/commands/WriteCommand.cpp
     # ── Console / screen multiplexer (UI) ────────────────────────────────────
     src/console/Console.cpp
     src/console/ScreenManager.cpp
