@@ -1,0 +1,12 @@
+num-cpu 2
+scheduler rr
+quantum-cycles 4
+batch-process-freq 1
+min-ins 10
+max-ins 20
+delays-per-exec 0
+max-overall-mem 2048
+mem-per-frame 256
+mem-per-proc 2048
+min-mem-per-proc 64
+max-mem-per-proc 1024
