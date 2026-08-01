@@ -4,8 +4,10 @@
 #include <thread>
 
 CPUWorker::CPUWorker(int id, IScheduler& scheduler,
-                     std::uint32_t quantum, std::uint32_t delaysPerExec)
-    : id(id), scheduler(scheduler), quantum(quantum), delaysPerExec(delaysPerExec) {}
+                     std::uint32_t quantum, std::uint32_t delaysPerExec,
+                     IMemoryAllocator& allocator)
+    : id(id), scheduler(scheduler), quantum(quantum), delaysPerExec(delaysPerExec),
+      allocator(allocator) {}
 
 CPUWorker::~CPUWorker() { stop(); }
 
@@ -57,6 +59,7 @@ void CPUWorker::workerLoop() {
         // STEP 5: execute up to `quantum` instructions (0 = run to completion)
         std::uint32_t executed = 0;
         bool yielded = false;
+        bool violated = false;
         while (!proc->isFinished()) {
             if (quantum > 0 && executed >= quantum) break; // quantum expired
 
@@ -69,6 +72,21 @@ void CPUWorker::workerLoop() {
             if (!running.load()) break; // shutting down
 
             proc->executeCurrentCommand();
+
+            if (proc->hasViolation()) {
+                violated = true;
+                break;
+            }
+
+            if (proc->getFault() == Process::MemFault::PageFault) {
+                allocator.handleFault(*proc, proc->getFaultPage());
+                proc->clearFault();
+                continue;   // do NOT moveToNextLine() or ++executed — the faulted instruction restarts.
+                            // This deliberately does not count against the RR quantum: the spec describes
+                            // fault resolution as happening "indefinitely" while the process still holds the
+                            // core, not as consuming its fair share of instruction slots.
+            }
+
             proc->moveToNextLine();
             ++executed;
 
@@ -87,6 +105,9 @@ void CPUWorker::workerLoop() {
         // STEP 6: finished vs. quantum-expired (preempted) vs. yielded for sleep
         if (yielded) {
             // Nothing to do — watcher thread re-admits via requeueReady when tick expires.
+        } else if (violated) {
+            proc->setState(Process::FINISHED);
+            scheduler.moveToFinished(proc);
         } else if (proc->isFinished()) {
             proc->setState(Process::FINISHED);
             scheduler.moveToFinished(proc);

@@ -9,7 +9,7 @@ RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_
       numCores(numCores), quantumCycles(quantumCycles), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)
-        workers.push_back(std::make_unique<CPUWorker>(i, *this, quantumCycles, delaysPerExec));
+        workers.push_back(std::make_unique<CPUWorker>(i, *this, quantumCycles, delaysPerExec, memory));
 }
 
 RRScheduler::~RRScheduler() { stop(); }

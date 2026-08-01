@@ -9,7 +9,7 @@ FCFSScheduler::FCFSScheduler(int numCores, std::uint32_t delaysPerExec,
       numCores(numCores), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)
-        workers.push_back(std::make_unique<CPUWorker>(i, *this, /*quantum=*/0, delaysPerExec));
+        workers.push_back(std::make_unique<CPUWorker>(i, *this, /*quantum=*/0, delaysPerExec, memory));
 }
 
 FCFSScheduler::~FCFSScheduler() { stop(); }

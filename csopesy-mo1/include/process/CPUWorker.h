@@ -1,5 +1,6 @@
 #pragma once
 #include "Process.h"
+#include "IMemoryAllocator.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -18,7 +19,8 @@ class IScheduler; // forward declaration — avoids circular include with ISched
 class CPUWorker {
 public:
     CPUWorker(int id, IScheduler& scheduler,
-              std::uint32_t quantum, std::uint32_t delaysPerExec);
+              std::uint32_t quantum, std::uint32_t delaysPerExec,
+              IMemoryAllocator& allocator);
     ~CPUWorker();
 
     void start(); // launch the worker thread
@@ -38,6 +40,7 @@ private:
     IScheduler&    scheduler;
     std::uint32_t  quantum;       // 0 = non-preemptive
     std::uint32_t  delaysPerExec; // additional ms per instruction
+    IMemoryAllocator& allocator;
 
     std::shared_ptr<Process>  currentProcess;
     std::atomic<bool>         running{false};
