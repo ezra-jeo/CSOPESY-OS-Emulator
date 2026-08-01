@@ -97,3 +97,23 @@ void MemoryManager::writeSnapshot(int quantumIndex, const std::string& outDir) c
     }
     out << "----start----- = 0\n";
 }
+
+std::uint64_t MemoryManager::usedBytes() const {
+    return totalSize - getExternalFragmentation();
+}
+
+std::uint64_t MemoryManager::freeBytes() const {
+    return getExternalFragmentation();
+}
+
+std::uint64_t MemoryManager::totalBytes() const {
+    return totalSize;
+}
+
+std::uint64_t MemoryManager::pagedIn() const {
+    return 0;
+}
+
+std::uint64_t MemoryManager::pagedOut() const {
+    return 0;
+}

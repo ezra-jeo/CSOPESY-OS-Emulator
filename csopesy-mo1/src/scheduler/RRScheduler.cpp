@@ -4,7 +4,7 @@
 #include <thread>
 
 RRScheduler::RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec,
-                          MemoryManager& memory, std::uint64_t memPerProc)
+                          IMemoryAllocator& memory, std::uint64_t memPerProc)
     : SchedulerBase(memory, memPerProc, quantumCycles),
       numCores(numCores), quantumCycles(quantumCycles), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);

@@ -1,6 +1,6 @@
 #pragma once
 #include "IScheduler.h"
-#include "MemoryManager.h"
+#include "IMemoryAllocator.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -14,7 +14,7 @@
 // (acquireMemory/releaseMemory) both scheduling policies dispatch through.
 class SchedulerBase : public IScheduler {
 public:
-    SchedulerBase(MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
+    SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
 
 protected:
     void startWatcher();
@@ -49,7 +49,7 @@ private:
     std::atomic<bool> watcherRunning{false};
     std::thread       watcherThread;
 
-    MemoryManager& memory;
+    IMemoryAllocator& memory;
     std::uint64_t  memPerProc;
     std::uint32_t  quantumCycles;      // also the memory-snapshot cadence, in CPU ticks
     int            quantumSnapshotIndex = 0;

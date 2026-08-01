@@ -12,7 +12,7 @@ namespace {
     constexpr const char* MEMORY_STAMP_DIR = "memory_stamps";
 }
 
-SchedulerBase::SchedulerBase(MemoryManager& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
+SchedulerBase::SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
     : memory(memory), memPerProc(memPerProc), quantumCycles(quantumCycles) {}
 
 bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {

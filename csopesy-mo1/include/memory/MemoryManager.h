@@ -1,4 +1,5 @@
 #pragma once
+#include "IMemoryAllocator.h"
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -19,20 +20,27 @@ struct MemoryBlock {
 // in address order and takes the first one large enough, splitting off the remainder as a
 // new free block. deallocate() frees a process's block and coalesces it with any adjacent
 // free neighbours so later allocations see the largest possible holes.
-class MemoryManager {
+class MemoryManager : public IMemoryAllocator {
 public:
     explicit MemoryManager(std::uint64_t totalSize);
 
     // Returns the base address on success, or nullopt if no free block is large enough.
-    std::optional<std::uint64_t> allocate(std::uint64_t size, const std::string& owner);
-    void deallocate(const std::string& owner);
+    std::optional<std::uint64_t> allocate(std::uint64_t size, const std::string& owner) override;
+    void deallocate(const std::string& owner) override;
 
-    int           getProcessCount()          const;
-    std::uint64_t getExternalFragmentation() const; // sum of all free block sizes
+    int           getProcessCount()          const override;
+    std::uint64_t getExternalFragmentation() const override; // sum of all free block sizes
 
     // Writes memory_stamp_<quantumIndex>.txt into outDir with the timestamp, process count,
     // external fragmentation, and an ASCII map of occupied blocks from high to low address.
-    void writeSnapshot(int quantumIndex, const std::string& outDir) const;
+    void writeSnapshot(int quantumIndex, const std::string& outDir) const override;
+
+    // Flat-model answers for the demand-paging bookkeeping hooks: no paging ever happens here.
+    std::uint64_t usedBytes()  const override;
+    std::uint64_t freeBytes()  const override;
+    std::uint64_t totalBytes() const override;
+    std::uint64_t pagedIn()    const override;
+    std::uint64_t pagedOut()   const override;
 
 private:
     std::uint64_t totalSize;
