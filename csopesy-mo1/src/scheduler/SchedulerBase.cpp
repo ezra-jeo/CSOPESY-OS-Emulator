@@ -17,11 +17,7 @@ SchedulerBase::SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc,
 
 bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {
     if (p->hasMemory()) return true;
-    auto base = memory.allocate(memPerProc, p->getName());
-    if (!base) return false;
-    p->setMemory(*base, memPerProc);
-    p->bindMemory(memPerProc, memPerProc, /*demandPaged=*/false);
-    return true;
+    return memory.admit(*p, memPerProc);
 }
 
 void SchedulerBase::releaseMemory(const std::shared_ptr<Process>& p) {

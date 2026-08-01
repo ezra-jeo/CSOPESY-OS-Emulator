@@ -1,4 +1,5 @@
 #include "MemoryManager.h"
+#include "Process.h"
 #include <algorithm>
 #include <ctime>
 #include <filesystem>
@@ -47,6 +48,22 @@ void MemoryManager::deallocate(const std::string& owner) {
             ++i;
         }
     }
+}
+
+bool MemoryManager::admit(Process& proc, std::uint64_t size) {
+    auto base = allocate(size, proc.getName());
+    if (!base) return false;
+    proc.setMemory(*base, size);
+    proc.bindMemory(size, size, /*demandPaged=*/false);
+    return true;
+}
+
+bool MemoryManager::handleFault(Process&, std::uint64_t) {
+    return true;
+}
+
+bool MemoryManager::isDemandPaged() const {
+    return false;
 }
 
 int MemoryManager::getProcessCount() const {

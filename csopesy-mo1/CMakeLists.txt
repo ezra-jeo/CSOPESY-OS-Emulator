@@ -32,6 +32,7 @@ set(SOURCES
     src/config/SystemConfig.cpp
     # ── Memory (first-fit flat allocator) ─────────────────────────────────────
     src/memory/MemoryManager.cpp
+    src/memory/PagingAllocator.cpp
 )
 
 add_executable(csopesy ${SOURCES})

@@ -28,6 +28,12 @@ public:
     std::optional<std::uint64_t> allocate(std::uint64_t size, const std::string& owner) override;
     void deallocate(const std::string& owner) override;
 
+    // Secures a block via allocate() and binds proc's flat (non-paged) address space.
+    bool admit(Process& proc, std::uint64_t size) override;
+    // Flat processes are always fully resident, so this is never actually reached.
+    bool handleFault(Process& proc, std::uint64_t vpage) override;
+    bool isDemandPaged() const override;
+
     int           getProcessCount()          const override;
     std::uint64_t getExternalFragmentation() const override; // sum of all free block sizes
 
