@@ -36,6 +36,8 @@ public:
     void cmdSchedulerStop();
     void cmdReportUtil();
     void printProcessList(std::ostream& os, bool color) const;
+    void cmdProcessSmi() const;   // main-menu-level summary (NOT ProcessScreen's per-process one)
+    void cmdVmstat() const;
 
     bool isInitialized() const { return initialized; }
 

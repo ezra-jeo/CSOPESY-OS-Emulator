@@ -5,6 +5,9 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
 
 namespace {
     const char* R  = "\033[0m";
@@ -32,7 +35,8 @@ ScreenAction MainMenuScreen::handleCommand(const std::vector<std::string>& args)
 
     // Recognized post-init commands; everything else is "command not found".
     static const std::set<std::string> known = {
-        "screen", "scheduler-start", "scheduler-stop", "report-util" };
+        "screen", "scheduler-start", "scheduler-stop", "report-util",
+        "process-smi", "vmstat" };
 
     if (!console.isInitialized()) {
         std::cout << GR << "error: " << R << "run initialize first\n";
@@ -47,6 +51,8 @@ ScreenAction MainMenuScreen::handleCommand(const std::vector<std::string>& args)
     if (cmd == "scheduler-start") { console.cmdSchedulerStart(); return ScreenAction::stay(); }
     if (cmd == "scheduler-stop")  { console.cmdSchedulerStop();  return ScreenAction::stay(); }
     if (cmd == "report-util")     { console.cmdReportUtil();     return ScreenAction::stay(); }
+    if (cmd == "process-smi")     { console.cmdProcessSmi();     return ScreenAction::stay(); }
+    if (cmd == "vmstat")          { console.cmdVmstat();         return ScreenAction::stay(); }
     return ScreenAction::stay();
 }
 
@@ -89,6 +95,20 @@ ScreenAction MainMenuScreen::handleScreen(const std::vector<std::string>& args) 
     }
     if (args.size() >= 3 && args[1] == "-r") {  // re-attach; must exist and not be finished
         auto proc = console.findProcess(args[2]);
+        // Check for a violation-terminated process before the generic not-found check: such a
+        // process is also isFinished()-equivalent and would otherwise fall through to "not found"
+        // instead of getting the spec-mandated violation message.
+        if (proc && proc->hasViolation()) {
+            std::time_t t = proc->getViolationTime();
+            char buf[16];
+            std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&t));
+            std::ostringstream addrStream;
+            addrStream << "0x" << std::hex << std::uppercase << proc->getViolationAddr();
+            std::cout << "Process " << args[2]
+                       << " shut down due to memory access violation error that occurred at "
+                       << buf << ". " << addrStream.str() << " invalid.\n";
+            return ScreenAction::stay();
+        }
         if (!proc || proc->isFinished()) {
             std::cout << "Process " << args[2] << " not found.\n";
             return ScreenAction::stay();

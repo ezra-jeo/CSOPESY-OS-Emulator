@@ -231,6 +231,44 @@ void Console::cmdReportUtil() {
     std::cout << GR << "  Report generated at " << R << "csopesy-log.txt\n";
 }
 
+void Console::cmdProcessSmi() const {
+    auto running = scheduler->getRunningProcesses();
+    int totalCores  = scheduler->getNumCores();
+    int activeCores = scheduler->getActiveCores();
+    int cpuUtil = (totalCores > 0) ? (activeCores * 100 / totalCores) : 0;
+
+    std::uint64_t used  = memory->usedBytes();
+    std::uint64_t total = memory->totalBytes();
+    int memUtil = (total > 0) ? static_cast<int>(used * 100 / total) : 0;
+
+    std::cout << "-------------------------------------\n";
+    std::cout << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
+    std::cout << "-------------------------------------\n";
+    std::cout << "CPU-Util: " << cpuUtil << "%\n";
+    std::cout << "Memory Usage: " << used << "B / " << total << "B\n";
+    std::cout << "Memory Util: " << memUtil << "%\n\n";
+    std::cout << "================================================\n";
+    std::cout << "Running processes and memory usage:\n";
+    std::cout << "-------------------------------------\n";
+    // getMemSize() is the process's total admitted address-space size, not per-frame resident
+    // bytes — the allocator has no per-process resident-byte query, and adding one is out of
+    // scope for this step, so this is the intentionally simpler "memory usage" figure.
+    for (const auto& p : running)
+        std::cout << p->getName() << " " << p->getMemSize() << "B\n";
+    std::cout << "-------------------------------------\n";
+}
+
+void Console::cmdVmstat() const {
+    std::cout << memory->totalBytes()          << " total memory\n";
+    std::cout << memory->usedBytes()           << " used memory\n";
+    std::cout << memory->freeBytes()           << " free memory\n";
+    std::cout << scheduler->getIdleTicks()     << " idle cpu ticks\n";
+    std::cout << scheduler->getActiveTicks()   << " active cpu ticks\n";
+    std::cout << scheduler->getTotalTicks()    << " total cpu ticks\n";
+    std::cout << memory->pagedIn()             << " num paged in\n";
+    std::cout << memory->pagedOut()            << " num paged out\n";
+}
+
 std::shared_ptr<Process> Console::findProcess(const std::string& name) const {
     std::lock_guard<std::mutex> lk(registryMutex);
     auto it = registry.find(name);
