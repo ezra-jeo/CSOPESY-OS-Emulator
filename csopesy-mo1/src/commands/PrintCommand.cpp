@@ -20,9 +20,13 @@ PrintCommand::PrintCommand(int pid, std::string prefix, std::string varName)
       varName(std::move(varName)), hasVar(true) {}
 
 void PrintCommand::execute(Process& owner) {
+    std::uint16_t val = 0;
+    if (hasVar) {
+        if (!owner.readVar(varName, val)) return;   // fault set; do not log — CPUWorker restarts
+    }
+
     std::string message = toPrint;
-    if (hasVar)
-        message += std::to_string(owner.getSymbolTable().getVariable(varName));
+    if (hasVar) message += std::to_string(val);
 
     owner.logMessage(message);  // PRINT output is always logged (spec)
 }

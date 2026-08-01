@@ -14,7 +14,11 @@ struct Operand {
     static Operand fromLiteral(std::uint16_t v) { return {true, v, {}}; }
     static Operand fromVar(std::string name)    { return {false, 0, std::move(name)}; }
 
-    std::uint16_t resolve(Process& owner) const;
+    // Resolves this operand's current value into `out`. Returns false (and leaves a fault set on
+    // `owner`, per Process::getFault()) if resolving requires a page that isn't resident, or the
+    // operand is a variable whose auto-declare-on-first-use write itself faults. Callers MUST stop
+    // and return immediately on false — do not proceed to any further reads/writes/logging.
+    bool resolve(Process& owner, std::uint16_t& out) const;
 
     // Source form for logging: the variable name, or the literal value as text.
     std::string toString() const {
