@@ -5,3 +5,4 @@ build/
 output/
 csopesy-log.txt
 memory_stamps/
+csopesy-backing-store.txt
