@@ -61,6 +61,12 @@ public:
     std::uint64_t getBaseAddress() const;
     std::uint64_t getMemSize()     const;
 
+    // Communicates a specific memory size to use the FIRST time this process is admitted
+    // (screen -s/-c give an explicit size). 0 (the default) means "unset" — SchedulerBase::
+    // acquireMemory falls back to its configured memPerProc, unchanged from before this step.
+    void          setRequestedMemSize(std::uint64_t size);
+    std::uint64_t getRequestedMemSize() const;
+
     // --- MO2 demand paging (Step 3): virtual address space + fault channel ---
     enum class MemFault { None, PageFault, Violation };
 
@@ -142,6 +148,7 @@ private:
     bool          memAllocated = false;
     std::uint64_t baseAddress  = 0;
     std::uint64_t memSize      = 0;
+    std::uint64_t requestedMemSize = 0;
 
     // --- MO2 demand paging (Step 3) ---
     bool                   paged        = false;

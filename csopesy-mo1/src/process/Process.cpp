@@ -91,6 +91,9 @@ bool          Process::hasMemory()      const { return memAllocated; }
 std::uint64_t Process::getBaseAddress() const { return baseAddress; }
 std::uint64_t Process::getMemSize()     const { return memSize; }
 
+void          Process::setRequestedMemSize(std::uint64_t size) { requestedMemSize = size; }
+std::uint64_t Process::getRequestedMemSize() const { return requestedMemSize; }
+
 // --- MO2 demand paging (Step 3) ---
 
 void Process::bindMemory(std::uint64_t memSizeBytes, std::uint64_t pageSize, bool demandPaged) {

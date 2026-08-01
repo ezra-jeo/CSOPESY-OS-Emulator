@@ -17,7 +17,9 @@ SchedulerBase::SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc,
 
 bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {
     if (p->hasMemory()) return true;
-    return memory.admit(*p, memPerProc);
+    std::uint64_t size = p->getRequestedMemSize();
+    if (size == 0) size = memPerProc;
+    return memory.admit(*p, size);
 }
 
 void SchedulerBase::releaseMemory(const std::shared_ptr<Process>& p) {
