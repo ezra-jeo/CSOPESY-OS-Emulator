@@ -15,7 +15,7 @@
 //   max-ins 2000
 //   delays-per-exec 0
 //   max-overall-mem 16384
-//   mem-per-frame 16
+//   mem-per-frame 64
 //   mem-per-proc 4096
 //   min-mem-per-proc 64
 //   max-mem-per-proc 4096
@@ -33,7 +33,7 @@ struct SystemConfig {
 
     // First-fit flat memory allocator (lecture: "Emulating a first-fit flat memory model").
     std::uint64_t maxOverallMem   = 16384;   // total main memory in bytes; >= memPerProc
-    std::uint64_t memPerFrame     = 16;      // bytes per frame; >= 1
+    std::uint64_t memPerFrame     = 64;      // bytes per frame; power of two in [64, 65536]
     std::uint64_t memPerProc      = 4096;    // fixed per-process footprint; >= 1
 
     // MO2 demand-paging process sizing: scheduler_start rolls each new process's footprint
