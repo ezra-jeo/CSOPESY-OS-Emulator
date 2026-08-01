@@ -55,8 +55,36 @@ ScreenAction MainMenuScreen::handleScreen(const std::vector<std::string>& args) 
         console.printProcessList(std::cout, true);
         return ScreenAction::stay();
     }
-    if (args.size() >= 3 && args[1] == "-s") {  // create (or attach to existing) and enter
-        auto proc = console.getOrCreateProcess(args[2]);
+    if (args.size() >= 2 && args[1] == "-s") {  // create (or attach to existing) and enter
+        if (args.size() != 3 && args.size() != 4) {
+            std::cout << GR << "  usage: screen -s <name> [<size>]\n" << R;
+            return ScreenAction::stay();
+        }
+        std::uint64_t size = 0;
+        if (args.size() == 4) {
+            try { size = std::stoull(args[3]); }
+            catch (...) { std::cout << "invalid memory allocation\n"; return ScreenAction::stay(); }
+        }
+        std::string err;
+        auto proc = console.createProcess(args[2], size, err);
+        if (!proc) { std::cout << err << "\n"; return ScreenAction::stay(); }
+        return ScreenAction::push(std::make_shared<ProcessScreen>(proc));
+    }
+    if (args.size() >= 2 && args[1] == "-c") {
+        std::string err;
+        std::shared_ptr<Process> proc;
+        if (args.size() == 4) {                      // screen -c <name> "<instr>"  (no size)
+            proc = console.createProcessWithInstructions(args[2], 0, args[3], err);
+        } else if (args.size() == 5) {                // screen -c <name> <size> "<instr>"
+            std::uint64_t size = 0;
+            try { size = std::stoull(args[3]); }
+            catch (...) { std::cout << "invalid memory allocation\n"; return ScreenAction::stay(); }
+            proc = console.createProcessWithInstructions(args[2], size, args[4], err);
+        } else {
+            std::cout << GR << "  usage: screen -c <name> [<size>] \"<instructions>\"\n" << R;
+            return ScreenAction::stay();
+        }
+        if (!proc) { std::cout << err << "\n"; return ScreenAction::stay(); }
         return ScreenAction::push(std::make_shared<ProcessScreen>(proc));
     }
     if (args.size() >= 3 && args[1] == "-r") {  // re-attach; must exist and not be finished
@@ -67,6 +95,6 @@ ScreenAction MainMenuScreen::handleScreen(const std::vector<std::string>& args) 
         }
         return ScreenAction::push(std::make_shared<ProcessScreen>(proc));
     }
-    std::cout << GR << "  usage: screen -ls | screen -s <name> | screen -r <name>\n" << R;
+    std::cout << GR << "  usage: screen -ls | screen -s <name> [<size>] | screen -c <name> [<size>] \"<instructions>\" | screen -r <name>\n" << R;
     return ScreenAction::stay();
 }

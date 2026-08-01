@@ -5,9 +5,13 @@
 #include "SubtractCommand.h"
 #include "SleepCommand.h"
 #include "ForCommand.h"
+#include "ReadCommand.h"
+#include "WriteCommand.h"
 #include <random>
 #include <iomanip>
 #include <sstream>
+#include <cctype>
+#include <algorithm>
 
 namespace {
 
@@ -73,6 +77,93 @@ std::vector<std::shared_ptr<ICommand>> makeFlat(
     }
 }
 
+// ── screen -c instruction-text parser ────────────────────────────────────────
+
+std::string trim(const std::string& s) {
+    std::size_t b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return "";
+    std::size_t e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+
+// Splits `text` on ';', but never on a ';' inside a "..." span. Trims each piece and drops a
+// trailing empty piece (from a trailing ';').
+std::vector<std::string> splitInstructions(const std::string& text) {
+    std::vector<std::string> out;
+    std::string cur;
+    bool inQuotes = false;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        char c = text[i];
+        if (c == '"' && (i == 0 || text[i - 1] != '\\')) inQuotes = !inQuotes;
+        if (c == ';' && !inQuotes) {
+            out.push_back(trim(cur));
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    std::string last = trim(cur);
+    if (!last.empty()) out.push_back(last);
+    return out;
+}
+
+// Splits `rest` on whitespace runs into tokens.
+std::vector<std::string> splitTokens(const std::string& rest) {
+    std::vector<std::string> out;
+    std::istringstream iss(rest);
+    for (std::string tok; iss >> tok; ) out.push_back(tok);
+    return out;
+}
+
+// Splits `piece` into (opcode, rest) on the first whitespace run, OR on '(' if that comes first
+// with no separating space (PRINT's own examples appear both as "PRINT(...)" and "PRINT( ...)").
+bool splitOpcode(const std::string& piece, std::string& opcode, std::string& rest) {
+    std::size_t i = 0;
+    while (i < piece.size() && !std::isspace(static_cast<unsigned char>(piece[i])) && piece[i] != '(') ++i;
+    if (i == 0) return false;
+    opcode = piece.substr(0, i);
+    while (i < piece.size() && std::isspace(static_cast<unsigned char>(piece[i]))) ++i;
+    rest = piece.substr(i);
+    return true;
+}
+
+// A token parses as a non-negative decimal integer fitting uint16_t.
+bool tryParseU16Decimal(const std::string& token, std::uint16_t& out) {
+    if (token.empty()) return false;
+    for (char c : token) if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    try {
+        unsigned long v = std::stoul(token);
+        if (v > 65535UL) return false;
+        out = static_cast<std::uint16_t>(v);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+Operand parseOperand(const std::string& token) {
+    std::uint16_t v;
+    if (tryParseU16Decimal(token, v)) return Operand::fromLiteral(v);
+    return Operand::fromVar(token);
+}
+
+// Token must begin with 0x/0X; the remainder parses as base-16 and fits [0, 65535].
+bool parseHexAddr(const std::string& token, std::uint16_t& out) {
+    if (token.size() < 3) return false;
+    if (token[0] != '0' || (token[1] != 'x' && token[1] != 'X')) return false;
+    std::string digits = token.substr(2);
+    if (digits.empty()) return false;
+    for (char c : digits) if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
+    try {
+        unsigned long v = std::stoul(digits, nullptr, 16);
+        if (v > 65535UL) return false;
+        out = static_cast<std::uint16_t>(v);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 } // namespace
 
 ProcessGenerator::ProcessGenerator(const SystemConfig& cfg) : cfg(cfg) {}
@@ -91,6 +182,85 @@ std::shared_ptr<Process> ProcessGenerator::generate(const std::string& name) {
     auto proc = std::make_shared<Process>(pid, name);
     buildInstructions(*proc);
     return proc;
+}
+
+std::shared_ptr<Process> ProcessGenerator::createEmpty(const std::string& name) {
+    const int pid = nextPid++;
+    return std::make_shared<Process>(pid, name);
+}
+
+bool ProcessGenerator::buildFromInstructionText(Process& proc, const std::string& text, std::string& err) {
+    auto pieces = splitInstructions(text);
+    if (pieces.empty() || pieces.size() > 50) {
+        err = "invalid command";
+        return false;
+    }
+
+    const int pid = proc.getPID();
+
+    for (const auto& piece : pieces) {
+        std::string opcode, rest;
+        if (!splitOpcode(piece, opcode, rest)) { err = "invalid command"; return false; }
+
+        if (opcode == "DECLARE") {
+            auto toks = splitTokens(rest);
+            std::uint16_t value;
+            if (toks.size() != 2 || !tryParseU16Decimal(toks[1], value)) {
+                err = "invalid command";
+                return false;
+            }
+            proc.addCommand(std::make_shared<DeclareCommand>(pid, toks[0], value));
+        } else if (opcode == "ADD" || opcode == "SUBTRACT") {
+            auto toks = splitTokens(rest);
+            if (toks.size() != 3) { err = "invalid command"; return false; }
+            Operand op1 = parseOperand(toks[1]);
+            Operand op2 = parseOperand(toks[2]);
+            if (opcode == "ADD")
+                proc.addCommand(std::make_shared<AddCommand>(pid, toks[0], op1, op2));
+            else
+                proc.addCommand(std::make_shared<SubtractCommand>(pid, toks[0], op1, op2));
+        } else if (opcode == "WRITE") {
+            auto toks = splitTokens(rest);
+            std::uint16_t addr;
+            if (toks.size() != 2 || !parseHexAddr(toks[0], addr)) { err = "invalid command"; return false; }
+            Operand value = parseOperand(toks[1]);
+            proc.addCommand(std::make_shared<WriteCommand>(pid, addr, value));
+        } else if (opcode == "READ") {
+            auto toks = splitTokens(rest);
+            std::uint16_t addr;
+            if (toks.size() != 2 || !parseHexAddr(toks[1], addr)) { err = "invalid command"; return false; }
+            proc.addCommand(std::make_shared<ReadCommand>(pid, toks[0], addr));
+        } else if (opcode == "PRINT") {
+            std::string body = trim(rest);
+            if (body.size() < 2 || body.front() != '(' || body.back() != ')') {
+                err = "invalid command";
+                return false;
+            }
+            std::string inner = trim(body.substr(1, body.size() - 2));
+            if (inner.empty() || inner.front() != '"') { err = "invalid command"; return false; }
+
+            std::size_t closeQuote = inner.find('"', 1);
+            if (closeQuote == std::string::npos) { err = "invalid command"; return false; }
+            std::string literal = inner.substr(1, closeQuote - 1);
+            std::string after = trim(inner.substr(closeQuote + 1));
+
+            if (after.empty()) {
+                proc.addCommand(std::make_shared<PrintCommand>(pid, literal));
+            } else if (after.front() == '+') {
+                std::string varName = trim(after.substr(1));
+                if (varName.empty()) { err = "invalid command"; return false; }
+                proc.addCommand(std::make_shared<PrintCommand>(pid, literal, varName));
+            } else {
+                err = "invalid command";
+                return false;
+            }
+        } else {
+            err = "invalid command";
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void ProcessGenerator::buildInstructions(Process& proc) {

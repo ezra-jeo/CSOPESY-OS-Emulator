@@ -14,6 +14,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <random>
 
 // Prepare a Windows console for UTF-8 + ANSI VT100 output; no-op everywhere else.
 #ifdef _WIN32
@@ -236,13 +237,73 @@ std::shared_ptr<Process> Console::findProcess(const std::string& name) const {
     return it != registry.end() ? it->second : nullptr;
 }
 
-std::shared_ptr<Process> Console::getOrCreateProcess(const std::string& name) {
+namespace {
+bool isPowerOfTwo(std::uint64_t value) {
+    return value != 0 && (value & (value - 1)) == 0;
+}
+}
+
+bool Console::resolveMemSize(std::uint64_t size, std::uint64_t& out) const {
+    if (size == 0) {
+        // Roll a power-of-two from [minMemPerProc, maxMemPerProc]; both bounds are guaranteed
+        // powers of two by SystemConfig::validate().
+        std::vector<std::uint64_t> candidates;
+        for (std::uint64_t v = config.minMemPerProc; v <= config.maxMemPerProc; v *= 2)
+            candidates.push_back(v);
+        static thread_local std::mt19937 rng(std::random_device{}());
+        std::uniform_int_distribution<std::size_t> dist(0, candidates.size() - 1);
+        out = candidates[dist(rng)];
+        return true;
+    }
+    if (!isPowerOfTwo(size) || size < 64 || size > 65536) return false;
+    out = size;
+    return true;
+}
+
+std::shared_ptr<Process> Console::createProcess(const std::string& name, std::uint64_t size, std::string& err) {
     {
         std::lock_guard<std::mutex> lk(registryMutex);
         auto it = registry.find(name);
         if (it != registry.end()) return it->second;  // `screen -s` attaches to an existing name
     }
+
+    std::uint64_t resolved;
+    if (!resolveMemSize(size, resolved)) {
+        err = "invalid memory allocation";
+        return nullptr;
+    }
+
     auto proc = generator->generate(name);
+    proc->setRequestedMemSize(resolved);
+    {
+        std::lock_guard<std::mutex> lk(registryMutex);
+        registry[name] = proc;
+    }
+    scheduler->addProcess(proc);
+    return proc;
+}
+
+std::shared_ptr<Process> Console::createProcessWithInstructions(
+    const std::string& name, std::uint64_t size, const std::string& instrText, std::string& err)
+{
+    {
+        std::lock_guard<std::mutex> lk(registryMutex);
+        if (registry.find(name) != registry.end()) {
+            err = "Process " + name + " already exists.";
+            return nullptr;
+        }
+    }
+
+    std::uint64_t resolved;
+    if (!resolveMemSize(size, resolved)) {
+        err = "invalid memory allocation";
+        return nullptr;
+    }
+
+    auto proc = generator->createEmpty(name);
+    if (!generator->buildFromInstructionText(*proc, instrText, err)) return nullptr;
+
+    proc->setRequestedMemSize(resolved);
     {
         std::lock_guard<std::mutex> lk(registryMutex);
         registry[name] = proc;
