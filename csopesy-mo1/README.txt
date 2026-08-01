@@ -13,8 +13,12 @@ Entry point:
 What this is:
   A standalone C++20 command-line OS emulator: a process multiplexer plus a
   command-line interpreter. Continued from the Phase-1 FCFS demo (csopesy-fcfs/) and
-  being extended to the full MO1 spec (FCFS + round-robin, config.txt-driven,
-  full instruction set, screen multiplexer).
+  extended to the full MO1 spec (FCFS + round-robin, config.txt-driven,
+  full instruction set, screen multiplexer). This iteration (MO2) adds demand-paging
+  memory management on top of MO1: a virtual address space per process, a
+  demand-paging allocator with FIFO eviction to an on-disk backing store, page-fault
+  handling in the scheduler, and the READ/WRITE instructions + process-smi/vmstat
+  commands used to exercise and observe it.
 
 Build:
   Linux / macOS:
@@ -63,13 +67,37 @@ Configuration (config.txt, space-separated "key value" lines):
   min-ins            min instructions per process         [1, 2^32-1]
   max-ins            max instructions per process         [1, 2^32-1], >= min-ins
   delays-per-exec    delay between instructions in cycles  [0, 2^32-1]
+  max-overall-mem    total addressable main memory, bytes  power of 2 in [64, 65536]
+  mem-per-frame      bytes per frame/page                  power of 2 in [64, 65536]
+  mem-per-proc       legacy flat-model fixed process size  power of 2 in [64, 65536]
+  min-mem-per-proc   MO2 paging: lower bound on a rolled    power of 2 in [64, 65536]
+                     process size (scheduler-start/screen -s/-c with no size)
+  max-mem-per-proc   MO2 paging: upper bound on a rolled    power of 2 in [64, 65536]
+                     process size; >= min-mem-per-proc
+  Presence of either min-mem-per-proc or max-mem-per-proc in config.txt selects the
+  demand-paging allocator (PagingAllocator) over the legacy flat first-fit allocator
+  (MemoryManager) keyed off mem-per-proc.
 
 Commands (main menu):
-  initialize         load + validate config.txt (run first)
-  screen -s <name>   create a process and attach to its screen
-  screen -r <name>   re-attach to an existing process's screen
-  screen -ls         list CPU utilization + running/finished processes
-  scheduler-start    continuously generate dummy processes
-  scheduler-stop     stop generating dummy processes
-  report-util        write a CPU utilization report to csopesy-log.txt
-  exit               terminate the console
+  initialize                          load + validate config.txt (run first)
+  screen -s <name> [<size>]           create a process (optional explicit byte size,
+                                       power of 2 in [64, 65536]) and attach to its screen
+  screen -c <name> [<size>] "<ins>"   create a process from literal instruction text
+                                       (see "screen -c instruction syntax" below) and attach
+  screen -r <name>                    re-attach to an existing process's screen
+  screen -ls                          list CPU utilization + running/finished processes
+  scheduler-start                     continuously generate dummy processes
+  scheduler-stop                      stop generating dummy processes
+  report-util                         write a CPU utilization report to csopesy-log.txt
+  process-smi                         CPU/memory utilization + per-process memory usage
+  vmstat                              memory + CPU tick + paging (in/out) counters
+  exit                                terminate the console
+
+screen -c instruction syntax (";"-separated, up to 50 instructions):
+  DECLARE var value            declare/set a variable to a uint16 literal
+  ADD dest op1 op2             dest = op1 + op2 (literal or var operands, clamped to uint16)
+  SUBTRACT dest op1 op2        dest = op1 - op2 (floored at 0)
+  WRITE 0xADDR value-or-var    write a uint16 to a process-relative virtual address
+  READ var 0xADDR              read a uint16 from a process-relative virtual address into var
+  PRINT("text")                 log a literal string
+  PRINT("text" + var)           log a literal string concatenated with a variable's value

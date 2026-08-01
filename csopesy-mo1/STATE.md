@@ -408,3 +408,72 @@ delays-per-exec 0    # extra CPU ticks to wait before each instruction
   says "not found" — distinguishing finished vs. missing is not required.
 - **Logs grow unbounded:** every PRINT appends to the in-memory `logs` vector for the life of
   the process. No tail-limit is applied (out of scope for current requirements).
+
+---
+
+## 9. MO2 — Demand Paging Additions
+
+Everything below is new relative to Sections 1-8; nothing above changed behaviourally except
+where noted. `config.txt`'s presence of `min-mem-per-proc`/`max-mem-per-proc` is the single
+switch that turns all of this on (`SystemConfig::sawMinMaxMemPerProc`,
+`include/config/SystemConfig.h` / `src/config/SystemConfig.cpp`).
+
+### `IMemoryAllocator` seam (`include/memory/IMemoryAllocator.h`)
+Abstract interface `Console`/`SchedulerBase` hold instead of a concrete allocator type:
+`allocate`/`deallocate` (legacy), `admit(Process&, size)`, `handleFault(Process&, vpage)`,
+`isDemandPaged()`, `usedBytes`/`freeBytes`/`totalBytes`, `pagedIn`/`pagedOut`.
+- **`MemoryManager`** (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`) — the
+  pre-existing MO1 flat first-fit allocator, unchanged, now behind the interface. `admit()` binds
+  every page resident immediately (`Process::bindMemory(..., demandPaged=false)`); its
+  `handleFault()` is a never-really-reached `return true`. `pagedIn()`/`pagedOut()` always 0.
+- **`PagingAllocator`** (`include/memory/PagingAllocator.h` / `src/memory/PagingAllocator.cpp`) —
+  new. Fixed frame table (`maxOverallMem / memPerFrame` frames), FIFO eviction (`loadOrder`
+  deque), an in-memory `store` map mirrored to `csopesy-backing-store.txt` on every eviction.
+  `Console::cmdInitialize` (`src/console/Console.cpp`) picks one or the other:
+  `sawMinMaxMemPerProc ? PagingAllocator : MemoryManager`.
+
+### `Process` virtual-address-space / fault-channel API (`include/process/Process.h` /
+`src/process/Process.cpp`)
+- `bindMemory(memSize, pageSize, demandPaged)` sets up `[0, memSize)`; `isPaged()`,
+  `getPageCount()`, `getPageSizeBytes()`.
+- `memRead(addr, &out)` / `memWrite(addr, value)` — the *only* paths into process memory. Return
+  `false` + set `getFault()` (`PageFault` or `Violation`) on failure.
+- `declareVar`/`readVar`/`writeVar` — offset-backed via `SymbolTable::offsetFor`/`hasOffset`
+  (`include/process/SymbolTable.h`); the first 64 bytes of every process's address space are the
+  32-slot symbol-table segment. A 33rd distinct variable name silently no-ops (spec-mandated,
+  not an error) instead of writing anywhere.
+- `isPageResident`/`extractPageBytes`/`installPageBytes`/`invalidatePage` — the paging
+  allocator's only touchpoints into a process's page table; the flat allocator never calls these.
+- Permanent violation record: `hasViolation()`/`getViolationTime()`/`getViolationAddr()` survive
+  `clearFault()`, read later by `MainMenuScreen::handleScreen`'s `screen -r` violation check
+  (`src/console/MainMenuScreen.cpp`).
+
+### `CPUWorker` fault-restart loop (`src/process/CPUWorker.cpp`)
+After `executeCurrentCommand()`: a `Violation` breaks the loop and the process moves straight to
+`FINISHED`. A `PageFault` calls `allocator.handleFault(*proc, proc->getFaultPage())`,
+`clearFault()`s, then `continue`s — **without** `moveToNextLine()` or incrementing `executed` —
+so the faulted instruction restarts and, crucially, fault resolution never consumes any of the
+process's RR quantum.
+
+### `ReadCommand` / `WriteCommand` (`include/commands/{Read,Write}Command.h` /
+`src/commands/{Read,Write}Command.cpp`)
+`READ var 0xADDR` → `memRead` then `declareVar`. `WRITE 0xADDR value-or-var` → resolve the
+operand first (so a variable-valued RHS that itself faults is restart-safe), then `memWrite`.
+Both are no-ops on failure — they rely entirely on the CPUWorker fault-restart loop above, never
+retry internally.
+
+### `screen -c` instruction-text parser (`ProcessGenerator::buildFromInstructionText`,
+`src/process/ProcessGenerator.cpp`)
+Parses a `;`-separated instruction string (quote-aware split so `;` inside a `PRINT("...")`
+literal doesn't break the split) into `DECLARE`/`ADD`/`SUBTRACT`/`WRITE`/`READ`/`PRINT` commands.
+Caps at 50 instructions; any parse failure returns `"invalid command"` via the `err` out-param.
+`MainMenuScreen::handleScreen`'s `screen -c` branch (`src/console/MainMenuScreen.cpp`) is the
+only caller.
+
+### `process-smi` / `vmstat` (`Console::cmdProcessSmi` / `Console::cmdVmstat`,
+`src/console/Console.cpp`)
+Main-menu commands (distinct from `ProcessScreen`'s attached-screen `process-smi`, which just
+re-renders the current process). `process-smi`: system CPU util + `memory->usedBytes()`/
+`totalBytes()` + a per-running-process `getMemSize()` table. `vmstat`: total/used/free memory,
+cumulative idle/active/total CPU ticks (`IScheduler::getIdleTicks`/`getActiveTicks`/
+`getTotalTicks`), and `memory->pagedIn()`/`pagedOut()`.

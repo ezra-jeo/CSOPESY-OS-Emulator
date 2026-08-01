@@ -1,6 +1,8 @@
-# PPT Content — CSOPESY MO1
+# PPT Content — CSOPESY MO1 / MO2
 
-Slide-ready notes for the five required sections from the MO1 spec.
+Slide-ready notes for the required sections from the MO1 spec (Sections 1-5), plus Section 6
+added for MO2's demand-paging memory management requirement. This file accumulates across
+iterations — MO1 sections are extended in place with MO2 additions rather than removed.
 Each section maps to one PPT topic area; bullet points are slide talking-points.
 
 ---
@@ -22,20 +24,32 @@ Each section maps to one PPT topic area; bullet points are slide talking-points.
 | `scheduler-stop` | stop batch process generation |
 | `report-util` | write status snapshot to `csopesy-log.txt` |
 | `screen -ls` | print Running / Sleeping / Finished table |
-| `screen -s <name>` | create (or attach to existing) process, enter its screen |
-| `screen -r <name>` | re-attach to an existing, non-finished process |
+| `screen -s <name> [<size>]` | create (or attach to existing) process, optional explicit power-of-2 byte size, enter its screen |
+| `screen -c <name> [<size>] "<ins>"` | create a process from a literal `;`-separated instruction string (DECLARE/ADD/SUBTRACT/WRITE/READ/PRINT, up to 50 instructions), enter its screen |
+| `screen -r <name>` | re-attach to an existing, non-finished, non-violated process |
+| `process-smi` (MO2) | system-wide CPU/memory utilization + per-running-process memory usage table |
+| `vmstat` (MO2) | total/used/free memory, idle/active/total CPU ticks, num paged in/out |
 | `exit` | quit the emulator |
 
 **Attached process screen (`ProcessScreen`) recognized commands:**
 | Command | Action |
 |---|---|
-| `process-smi` | refresh the process detail + instruction view |
+| `process-smi` | refresh the process detail + instruction view (this is a *different* `process-smi` from the main-menu one above — same name, screen-scoped) |
 | `exit` | detach and return to main menu |
 
 **Guard:** every post-init command (all except `initialize` / `exit`) is blocked with
 `error: run initialize first` until `console.isInitialized()` returns true.
 
 **Unknown input:** `csosh: command not found: <cmd>` (gray/yellow ANSI).
+
+**MO2 addition — `screen -r` on a memory-access-violation-terminated process:** checked *before*
+the generic not-found path, so a violated process reports its violation instead of
+`Process <name> not found.`:
+```
+Process <name> shut down due to memory access violation error that occurred at <HH:MM:SS>. <0xADDR> invalid.
+```
+`screen -s`/`screen -c` with an explicit size that fails the power-of-2-in-`[64, 65536]` check
+print `invalid memory allocation` and create nothing (verified in testcases TC9/TC14).
 
 ---
 
@@ -204,6 +218,40 @@ Instructions:
 
 ---
 
+### MO2 addition — memory representation / addressing
+
+**Every process owns its own virtual address space `[0, memSize)`.** `memSize` is fixed at
+admission (`Process::bindMemory`), either from a `screen -s`/`screen -c` explicit size or a
+rolled `[min-mem-per-proc, max-mem-per-proc]` value.
+
+- **Symbol-table segment:** the first 64 bytes (`SymbolTable::SEGMENT_SIZE`) of every process's
+  address space are reserved for its variables. Each variable gets a 2-byte-aligned offset
+  (`SymbolTable::offsetFor`) — up to `SymbolTable::MAX_VARS = 32` slots. A 33rd distinct variable
+  name is **silently ignored** (spec: "succeeding instructions involving variable declarations
+  will be ignored"), not an error — verified in testcases TC12.
+- **`memRead(addr, &out)` / `memWrite(addr, value)` are the only paths into a process's memory.**
+  `DeclareCommand`/`AddCommand`/`SubtractCommand`/`PrintCommand`'s variable access and
+  `ReadCommand`/`WriteCommand`'s direct address access all funnel through these two calls —
+  there is no side channel that reads/writes process memory without going through the fault
+  channel below.
+- **Addresses in `READ`/`WRITE` (and the symbol table's internal offsets) are process-relative
+  virtual addresses**, always in `[0, memSize)` — never physical/frame addresses. The same
+  virtual address in two different processes maps to two entirely different physical frames (or
+  neither may be resident at all).
+- **Every `memRead`/`memWrite` can fault**, returning `false` and setting one of two outcomes on
+  `Process::getFault()`:
+  - `Violation` — address is `>= memSize` (out of bounds). Permanent: the process is terminated
+    (`hasViolation()`, `getViolationTime()`, `getViolationAddr()` survive `clearFault()` for
+    `screen -r` to report later).
+  - `PageFault` — address is in-bounds but its page (`addr / pageSizeBytes`) isn't resident yet.
+    Transient: cleared by `clearFault()` once the allocator installs the page.
+- Under the **flat** (non-paged) allocator, `bindMemory(..., demandPaged=false)` makes every page
+  resident immediately at admission — so flat processes can only ever produce `Violation`, never
+  `PageFault`; `IMemoryAllocator::handleFault()` for the flat allocator is a trivial `return true`
+  that's never meaningfully reached.
+
+---
+
 ## Section 5 — Scheduler Implementation
 
 **Overview:** two schedulers (FCFS and RR) share a common base. Both run three helper threads
@@ -261,6 +309,20 @@ for each instruction (up to quantum):
 After the loop: finished → `moveToFinished`; quantum expired → `requeue` (tail); sleep yield →
 watcher handles re-admission. Worker sets `idle = true` and calls `notifyScheduler()`.
 
+**MO2 addition — memory admission and page-fault handling** (brief recap; scheduling policy
+itself is unchanged from MO1):
+- Memory admission now goes through `IMemoryAllocator::admit(proc, size)` instead of a bare
+  `MemoryManager` call — the same interface point works whether `config.txt` selected the flat
+  allocator or `PagingAllocator`.
+- After `executeCurrentCommand()`, `CPUWorker` checks `proc->getFault()`. A `PageFault` calls
+  `allocator.handleFault(*proc, proc->getFaultPage())`, then `proc->clearFault()`, then
+  `continue`s the instruction loop **without** calling `moveToNextLine()` or incrementing
+  `executed` — the faulted instruction restarts from the top next time it runs. This deliberately
+  does **not** consume any of the process's RR quantum: fault resolution happens "indefinitely"
+  while the process still holds the core, not as part of its fair instruction share.
+- A `Violation` fault instead breaks the loop immediately and moves the process straight to
+  `FINISHED` (see Section 6 for backing-store/eviction detail).
+
 ---
 
 ### `RRScheduler` — Round-Robin
@@ -308,3 +370,58 @@ admits roughly one process per 10 ms; `batch-process-freq 100` ≈ one per secon
 | `batch-process-freq` | Ticks between process admissions |
 | `min-ins` / `max-ins` | Instruction count range per process |
 | `delays-per-exec` | Extra ticks waited before each instruction (0 = minimum pace) |
+| `min-mem-per-proc` / `max-mem-per-proc` (MO2) | Range a `scheduler-start`/no-size `screen -s`/`-c` process's memory footprint is rolled from; presence selects `PagingAllocator` |
+
+---
+
+## Section 6 — Memory Management: Demand Paging and Backing Store
+
+**Two allocators behind one interface (`IMemoryAllocator`, `include/memory/IMemoryAllocator.h`):**
+| | `MemoryManager` (flat, MO1) | `PagingAllocator` (demand paging, MO2) |
+|---|---|---|
+| Selected when | `config.txt` never sets `min-mem-per-proc`/`max-mem-per-proc` | either key is present |
+| Placement | First-fit over one contiguous flat address space | Fixed frame table, no contiguity requirement |
+| `admit()` | Finds/splits a free block; fails (caller requeues) if none big enough | Never fails — no physical frames needed up front |
+| Residency | Every page resident immediately (`demandPaged=false`) | Pages start non-resident; brought in on first fault |
+| Eviction | N/A (blocks freed whole on process finish) | FIFO over `loadOrder` (a `deque<frame index>`) |
+
+**`PagingAllocator` (`include/memory/PagingAllocator.h` / `src/memory/PagingAllocator.cpp`)**
+- Physical memory = `frames.size() = maxOverallMem / memPerFrame` fixed-size `Frame` slots.
+- `admit(proc, size)`: no frame allocation — just `proc.setMemory(0, size)` +
+  `proc.bindMemory(size, frameBytes, /*demandPaged=*/true)`. Every access starts as a fault.
+- `handleFault(proc, vpage)`:
+  1. Already resident → `return true` (race-safe re-check under the lock).
+  2. Free frame available → use it.
+  3. Otherwise: pop the **FIFO victim** (`loadOrder.front()`), `extractPageBytes()` its current
+     owner's page, stash the bytes in the in-memory `store` map (`(ownerName, page) → bytes`),
+     `invalidatePage()` the victim, count a **page-out**.
+  4. Load the incoming page's bytes — either from `store` (was paged out before) or zero-filled
+     (first touch) — via `installPageBytes()`, mark the frame occupied, push it onto the back of
+     `loadOrder` (newest), count a **page-in**.
+  5. Rewrite `csopesy-backing-store.txt` from the current `store` map (see below).
+- `pagedIn()` / `pagedOut()` — atomic counters surfaced by `vmstat`.
+
+**Backing store (`csopesy-backing-store.txt`):**
+- Created empty (`entries: 0`) the moment `PagingAllocator` is constructed at `initialize` —
+  present for the whole run, not just after the first fault.
+- Rewritten on every eviction: human-readable dump of `owner=<name> page=<n> bytes=<frameBytes>`
+  blocks, each page's bytes shown as little-endian `uint16` words at `[offset]`.
+- On a later `admit`/eviction/page-in for the same `(owner, page)` key, the stashed entry is
+  read back and removed from `store` — i.e. it round-trips exactly like a real backing store,
+  confirmed by testcase TC11 (content changes across snapshots taken seconds apart while the
+  scheduler runs).
+
+**Page-fault-and-restart flow (ties Section 5 together):** `CPUWorker` executes an instruction →
+`Process::memRead`/`memWrite` finds the page not resident → sets `MemFault::PageFault` → worker
+calls `allocator.handleFault()` → worker `clearFault()`s and restarts the *same* instruction
+(program counter not advanced) → on the retry the page is resident so the instruction actually
+completes and the counter advances normally.
+
+**`process-smi` / `vmstat` as the debugging surface for all of this** (`Console::cmdProcessSmi` /
+`Console::cmdVmstat`, `src/console/Console.cpp`):
+- `process-smi`: system CPU utilization, `memory->usedBytes()`/`totalBytes()` and derived percent,
+  then each **running** process's name + `getMemSize()` (total admitted address-space size, not
+  live resident-byte count — the allocator has no per-process resident-byte query).
+- `vmstat`: `totalBytes` / `usedBytes` / `freeBytes`, cumulative idle/active/total CPU ticks
+  (`SchedulerBase`), and `pagedIn()` / `pagedOut()` — the two counters used in TC10/TC11 to prove
+  paging activity is real and ongoing under memory pressure.
