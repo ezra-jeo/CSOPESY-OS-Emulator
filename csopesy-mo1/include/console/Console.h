@@ -2,7 +2,6 @@
 #include "IScheduler.h"
 #include "IMemoryAllocator.h"
 #include "MemoryManager.h"
-#include "PagingAllocator.h"
 #include "SystemConfig.h"
 #include "ProcessGenerator.h"
 #include "Process.h"

@@ -311,9 +311,9 @@ watcher handles re-admission. Worker sets `idle = true` and calls `notifySchedul
 
 **MO2 addition — memory admission and page-fault handling** (brief recap; scheduling policy
 itself is unchanged from MO1):
-- Memory admission now goes through `IMemoryAllocator::admit(proc, size)` instead of a bare
-  `MemoryManager` call — the same interface point works whether `config.txt` selected the flat
-  allocator or `PagingAllocator`.
+- Memory admission now goes through `IMemoryAllocator::admit(proc, size)` on a `MemoryManager`
+  facade — the same interface point works whether `config.txt` made `MemoryManager` wrap a
+  `FlatMemoryAllocator` or a `PagingAllocator` underneath.
 - After `executeCurrentCommand()`, `CPUWorker` checks `proc->getFault()`. A `PageFault` calls
   `allocator.handleFault(*proc, proc->getFaultPage())`, then `proc->clearFault()`, then
   `continue`s the instruction loop **without** calling `moveToNextLine()` or incrementing
@@ -376,8 +376,11 @@ admits roughly one process per 10 ms; `batch-process-freq 100` ≈ one per secon
 
 ## Section 6 — Memory Management: Demand Paging and Backing Store
 
-**Two allocators behind one interface (`IMemoryAllocator`, `include/memory/IMemoryAllocator.h`):**
-| | `MemoryManager` (flat, MO1) | `PagingAllocator` (demand paging, MO2) |
+**Two allocators behind one interface (`IMemoryAllocator`, `include/memory/IMemoryAllocator.h`),
+with a `MemoryManager` facade (`include/memory/MemoryManager.h`) that owns whichever one is
+selected and forwards every call to it — the rest of the program only ever talks to
+`MemoryManager`:**
+| | `FlatMemoryAllocator` (flat, MO1) | `PagingAllocator` (demand paging, MO2) |
 |---|---|---|
 | Selected when | `config.txt` never sets `min-mem-per-proc`/`max-mem-per-proc` | either key is present |
 | Placement | First-fit over one contiguous flat address space | Fixed frame table, no contiguity requirement |

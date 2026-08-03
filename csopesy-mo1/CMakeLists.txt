@@ -32,8 +32,9 @@ set(SOURCES
     src/scheduler/RRScheduler.cpp
     # ── Config ───────────────────────────────────────────────────────────────
     src/config/SystemConfig.cpp
-    # ── Memory (first-fit flat allocator) ─────────────────────────────────────
+    # ── Memory (MemoryManager facade over FlatMemoryAllocator / PagingAllocator) ─
     src/memory/MemoryManager.cpp
+    src/memory/FlatMemoryAllocator.cpp
     src/memory/PagingAllocator.cpp
 )
 

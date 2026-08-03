@@ -422,15 +422,22 @@ switch that turns all of this on (`SystemConfig::sawMinMaxMemPerProc`,
 Abstract interface `Console`/`SchedulerBase` hold instead of a concrete allocator type:
 `allocate`/`deallocate` (legacy), `admit(Process&, size)`, `handleFault(Process&, vpage)`,
 `isDemandPaged()`, `usedBytes`/`freeBytes`/`totalBytes`, `pagedIn`/`pagedOut`.
-- **`MemoryManager`** (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`) — the
-  pre-existing MO1 flat first-fit allocator, unchanged, now behind the interface. `admit()` binds
-  every page resident immediately (`Process::bindMemory(..., demandPaged=false)`); its
-  `handleFault()` is a never-really-reached `return true`. `pagedIn()`/`pagedOut()` always 0.
+- **`MemoryManager`** (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`) — a thin
+  facade, also implementing `IMemoryAllocator`. Its constructor
+  (`demandPaged, totalBytes, frameBytes`) picks one of the two strategies below and owns it as
+  `std::unique_ptr<IMemoryAllocator> strategy`; every method is a one-line forward to `strategy->`.
+  `Console::cmdInitialize` (`src/console/Console.cpp`) always constructs a `MemoryManager` —
+  `std::make_unique<MemoryManager>(sawMinMaxMemPerProc, maxOverallMem, memPerFrame)` — so the rest
+  of the program never needs to know or care which strategy is underneath.
+- **`FlatMemoryAllocator`** (`include/memory/FlatMemoryAllocator.h` /
+  `src/memory/FlatMemoryAllocator.cpp`) — the pre-existing MO1 flat first-fit allocator, unchanged
+  logic, now one of `MemoryManager`'s two strategies. `admit()` binds every page resident
+  immediately (`Process::bindMemory(..., demandPaged=false)`); its `handleFault()` is a
+  never-really-reached `return true`. `pagedIn()`/`pagedOut()` always 0.
 - **`PagingAllocator`** (`include/memory/PagingAllocator.h` / `src/memory/PagingAllocator.cpp`) —
-  new. Fixed frame table (`maxOverallMem / memPerFrame` frames), FIFO eviction (`loadOrder`
-  deque), an in-memory `store` map mirrored to `csopesy-backing-store.txt` on every eviction.
-  `Console::cmdInitialize` (`src/console/Console.cpp`) picks one or the other:
-  `sawMinMaxMemPerProc ? PagingAllocator : MemoryManager`.
+  the other strategy. Fixed frame table (`maxOverallMem / memPerFrame` frames), FIFO eviction
+  (`loadOrder` deque), an in-memory `store` map mirrored to `csopesy-backing-store.txt` on every
+  eviction.
 
 ### `Process` virtual-address-space / fault-channel API (`include/process/Process.h` /
 `src/process/Process.cpp`)

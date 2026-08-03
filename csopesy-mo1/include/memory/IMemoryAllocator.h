@@ -5,10 +5,10 @@
 
 class Process;
 
-// Abstract memory allocator interface shared by MemoryManager (flat first-fit, MO1) and the
-// demand-paging allocator introduced in a later step. SchedulerBase/Console hold an
-// IMemoryAllocator& / unique_ptr<IMemoryAllocator> so the scheduling and console code stays
-// unaware of which concrete allocation strategy is in play.
+// Abstract memory allocator interface shared by FlatMemoryAllocator (first-fit, MO1) and
+// PagingAllocator (demand paging, MO2) — the two strategies the MemoryManager facade picks
+// between. SchedulerBase/Console hold an IMemoryAllocator& / unique_ptr<IMemoryAllocator> so the
+// scheduling and console code stays unaware of which concrete allocation strategy is in play.
 class IMemoryAllocator {
 public:
     virtual ~IMemoryAllocator() = default;
@@ -37,8 +37,8 @@ public:
     virtual int           getProcessCount()          const = 0;
     virtual std::uint64_t getExternalFragmentation() const = 0; // sum of all free block sizes
 
-    // Writes memory_stamp_<quantumIndex>.txt into outDir (see MemoryManager for the flat-model
-    // format demand paging must also honour).
+    // Writes memory_stamp_<quantumIndex>.txt into outDir (see FlatMemoryAllocator for the
+    // flat-model format demand paging must also honour).
     virtual void writeSnapshot(int quantumIndex, const std::string& outDir) const = 0;
 
     // Demand-paging bookkeeping hooks. The flat first-fit allocator answers these from its

@@ -157,10 +157,8 @@ void Console::cmdInitialize() {
         return;
     }
 
-    if (config.sawMinMaxMemPerProc)
-        memory = std::make_unique<PagingAllocator>(config.maxOverallMem, config.memPerFrame);
-    else
-        memory = std::make_unique<MemoryManager>(config.maxOverallMem);
+    memory = std::make_unique<MemoryManager>(
+        config.sawMinMaxMemPerProc, config.maxOverallMem, config.memPerFrame);
 
     if (config.scheduler == SystemConfig::Scheduler::FCFS)
         scheduler = std::make_unique<FCFSScheduler>(

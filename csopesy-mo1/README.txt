@@ -76,7 +76,8 @@ Configuration (config.txt, space-separated "key value" lines):
                      process size; >= min-mem-per-proc
   Presence of either min-mem-per-proc or max-mem-per-proc in config.txt selects the
   demand-paging allocator (PagingAllocator) over the legacy flat first-fit allocator
-  (MemoryManager) keyed off mem-per-proc.
+  (FlatMemoryAllocator, keyed off mem-per-proc). Both live behind a MemoryManager
+  facade, so the rest of the program only ever talks to "the memory manager."
 
 Commands (main menu):
   initialize                          load + validate config.txt (run first)
