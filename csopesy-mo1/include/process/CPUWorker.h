@@ -30,6 +30,10 @@ public:
     void assign(std::shared_ptr<Process> p);
 
     bool                     isIdle()            const;
+    // True while this core is stalled servicing a process that can never assemble a complete
+    // resident set (see workerLoop). Such a core holds a process but retires no instructions, so
+    // getActiveCores() excludes it — mirroring how real vmstat separates I/O-wait from active CPU.
+    bool                     isStalled()         const;
     int                      getId()             const;
     std::shared_ptr<Process> getCurrentProcess() const; // snapshot for Console
 
@@ -45,6 +49,7 @@ private:
     std::shared_ptr<Process>  currentProcess;
     std::atomic<bool>         running{false};
     std::atomic<bool>         idle{true};
+    std::atomic<bool>         stalled{false};
     mutable std::mutex        mtx;
     std::condition_variable   cv;
     std::thread               workerThread;

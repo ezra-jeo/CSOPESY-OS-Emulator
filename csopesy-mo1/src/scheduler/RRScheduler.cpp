@@ -82,8 +82,10 @@ std::vector<std::shared_ptr<Process>> RRScheduler::getFinishedProcesses() const 
 int RRScheduler::getNumCores() const { return numCores; }
 
 int RRScheduler::getActiveCores() const {
+    // A core stalled on a process that can never be fully resident retires no instructions, so it
+    // is not doing CPU work — excluded here the way real vmstat separates I/O-wait from active.
     int count = 0;
-    for (const auto& w : workers) if (!w->isIdle()) ++count;
+    for (const auto& w : workers) if (!w->isIdle() && !w->isStalled()) ++count;
     return count;
 }
 

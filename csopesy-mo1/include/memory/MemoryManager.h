@@ -21,6 +21,8 @@ public:
     bool admit(Process& proc, std::uint64_t size) override;
     bool handleFault(Process& proc, std::uint64_t vpage) override;
 
+    std::uint64_t frameCount() const override;
+
     std::uint64_t usedBytes()  const override;
     std::uint64_t freeBytes()  const override;
     std::uint64_t totalBytes() const override;

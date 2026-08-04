@@ -22,6 +22,10 @@ public:
     // evicting a victim to the backing store first if none is free.
     virtual bool handleFault(Process& proc, std::uint64_t vpage) = 0;
 
+    // Total number of physical frames. A process needing more pages than this can never hold its
+    // whole address space at once, which CPUWorker uses to detect a process that cannot progress.
+    virtual std::uint64_t frameCount() const = 0;
+
     // Demand-paging bookkeeping hooks, answered from the frame table.
     virtual std::uint64_t usedBytes()  const = 0;
     virtual std::uint64_t freeBytes()  const = 0;

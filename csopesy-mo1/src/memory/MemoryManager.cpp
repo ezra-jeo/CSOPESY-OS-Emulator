@@ -99,6 +99,10 @@ bool MemoryManager::handleFault(Process& proc, std::uint64_t vpage) {
     return true;
 }
 
+std::uint64_t MemoryManager::frameCount() const {
+    return frames.size(); // fixed at construction; no lock needed
+}
+
 std::uint64_t MemoryManager::usedBytes() const {
     std::lock_guard<std::mutex> lock(mtx);
     std::uint64_t used = 0;

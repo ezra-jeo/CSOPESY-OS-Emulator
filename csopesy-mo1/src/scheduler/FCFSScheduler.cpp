@@ -77,8 +77,9 @@ std::vector<std::shared_ptr<Process>> FCFSScheduler::getFinishedProcesses() cons
 int FCFSScheduler::getNumCores()    const { return numCores; }
 
 int FCFSScheduler::getActiveCores() const {
+    // See RRScheduler::getActiveCores — a fault-stalled core is not doing CPU work.
     int count = 0;
-    for (const auto& w : workers) if (!w->isIdle()) ++count;
+    for (const auto& w : workers) if (!w->isIdle() && !w->isStalled()) ++count;
     return count;
 }
 

@@ -124,6 +124,8 @@ public:
 
     // Page-table access for a later step's paging allocator (flat model never calls these).
     bool                      isPageResident(std::uint64_t page) const;
+    // Index of the lowest page not currently in a frame, or getPageCount() if all are resident.
+    std::uint64_t             firstNonResidentPage() const;
     std::vector<std::uint8_t> extractPageBytes(std::uint64_t page) const;              // for paging OUT
     void                      installPageBytes(std::uint64_t page, const std::vector<std::uint8_t>& bytes); // paging IN; also marks resident
     void                      invalidatePage(std::uint64_t page);                       // marks evicted

@@ -31,8 +31,9 @@ void CPUWorker::assign(std::shared_ptr<Process> p) {
     cv.notify_one();
 }
 
-bool CPUWorker::isIdle() const { return idle; }
-int  CPUWorker::getId()  const { return id; }
+bool CPUWorker::isIdle()    const { return idle; }
+bool CPUWorker::isStalled() const { return stalled; }
+int  CPUWorker::getId()     const { return id; }
 
 std::shared_ptr<Process> CPUWorker::getCurrentProcess() const {
     std::lock_guard<std::mutex> lock(mtx);
@@ -75,6 +76,21 @@ void CPUWorker::workerLoop() {
             while (running.load() && scheduler.getCpuTick() < target)
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             if (!running.load()) break; // shutting down
+
+            // A process whose address space needs more pages than physical memory has frames can
+            // never hold a complete resident set: whatever it faults in must evict a page it still
+            // needs. Model that as no forward progress — service one missing page and retry the
+            // same instruction, forever. Processes that DO fit are untouched and keep ordinary
+            // demand paging (one page faulted in per reference), so this only fires for a process
+            // that is genuinely too large for the machine.
+            if (proc->getPageCount() > allocator.frameCount()) {
+                stalled = true;
+                const std::uint64_t missing = proc->firstNonResidentPage();
+                if (missing < proc->getPageCount())
+                    allocator.handleFault(*proc, missing);
+                continue; // no moveToNextLine(), no ++executed — nothing ever retires
+            }
+            stalled = false;
 
             proc->executeCurrentCommand();
 
@@ -127,6 +143,7 @@ void CPUWorker::workerLoop() {
             std::lock_guard<std::mutex> lg(mtx);
             currentProcess = nullptr;
         }
+        stalled = false;
         idle = true;
 
         // STEP 8: wake the scheduler so it can dispatch the next process

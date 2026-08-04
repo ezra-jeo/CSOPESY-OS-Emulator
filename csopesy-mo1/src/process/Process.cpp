@@ -203,6 +203,12 @@ bool Process::isPageResident(std::uint64_t page) const {
     return pageResident[page];
 }
 
+std::uint64_t Process::firstNonResidentPage() const {
+    for (std::uint64_t p = 0; p < pageResident.size(); ++p)
+        if (!pageResident[p]) return p;
+    return pageResident.size();
+}
+
 std::vector<std::uint8_t> Process::extractPageBytes(std::uint64_t page) const {
     std::vector<std::uint8_t> out;
     if (page >= pageResident.size()) return out;
