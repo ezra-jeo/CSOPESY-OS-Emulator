@@ -132,7 +132,6 @@ bool SystemConfig::validate(std::string& err) const {
     // legacy MO1-only config that never mentions them still validates cleanly.
     if (!validateMemSize("max-overall-mem", maxOverallMem, err)) return false;
     if (!validateMemSize("mem-per-frame", memPerFrame, err)) return false;
-    if (!validateMemSize("mem-per-proc", memPerProc, err)) return false;
     if (!validateMemSize("min-mem-per-proc", minMemPerProc, err)) return false;
     if (!validateMemSize("max-mem-per-proc", maxMemPerProc, err)) return false;
 
@@ -141,10 +140,19 @@ bool SystemConfig::validate(std::string& err) const {
             + std::to_string(maxMemPerProc) + ")";
         return false;
     }
-    if (memPerProc > maxOverallMem) {
-        err = "mem-per-proc (" + std::to_string(memPerProc) + ") must be <= max-overall-mem ("
-            + std::to_string(maxOverallMem) + ")";
-        return false;
+
+    // mem-per-proc is a legacy field the paging allocator never reads (PagingAllocator::admit
+    // sizes each process from min/max-mem-per-proc instead). Validating it against a config that
+    // never mentions it would reject otherwise-correct MO2 configs on the strength of an unused
+    // default (e.g. a tight max-overall-mem below the legacy 4096-byte default) — so only the
+    // flat allocator's config path checks it.
+    if (!sawMinMaxMemPerProc) {
+        if (!validateMemSize("mem-per-proc", memPerProc, err)) return false;
+        if (memPerProc > maxOverallMem) {
+            err = "mem-per-proc (" + std::to_string(memPerProc) + ") must be <= max-overall-mem ("
+                + std::to_string(maxOverallMem) + ")";
+            return false;
+        }
     }
     return true;
 }
