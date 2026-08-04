@@ -12,7 +12,9 @@ Each section maps to one PPT topic area; bullet points are slide talking-points.
 **How user input reaches a handler**
 
 - Single `std::getline(std::cin, line)` loop inside `ScreenManager::run()`.
-- Tokenizer (`tokenize()`) splits on whitespace via `istringstream >> token`.
+- Tokenizer (`tokenize()`) is **quote-aware**: a `"..."` span collapses into a single token and
+  `\"` inside it unescapes to a literal `"`. Required for `screen -c`, whose instruction string
+  contains both spaces and nested quotes (`PRINT(\"Result: \" + varC)`).
 - Dispatched to the **active screen's** `handleCommand(args)` — whichever screen is on top of
   the navigation stack gets input focus.
 
@@ -20,13 +22,13 @@ Each section maps to one PPT topic area; bullet points are slide talking-points.
 | Command | Action |
 |---|---|
 | `initialize` | load `config.txt`, build scheduler + generator |
-| `scheduler-start` | begin batch process generation |
+| `scheduler-start` / `scheduler-test` | begin batch process generation (synonyms — the spec names this command `scheduler-test`, this codebase originally shipped `scheduler-start`; both are accepted) |
 | `scheduler-stop` | stop batch process generation |
 | `report-util` | write status snapshot to `csopesy-log.txt` |
 | `screen -ls` | print Running / Sleeping / Finished table |
 | `screen -s <name> [<size>]` | create (or attach to existing) process, optional explicit power-of-2 byte size, enter its screen |
 | `screen -c <name> [<size>] "<ins>"` | create a process from a literal `;`-separated instruction string (DECLARE/ADD/SUBTRACT/WRITE/READ/PRINT, up to 50 instructions), enter its screen |
-| `screen -r <name>` | re-attach to an existing, non-finished, non-violated process |
+| `screen -r <name>` | re-attach to a live process; prints `Process <name> not found.` for an unknown name **or a finished one** (deliberate — this is the literal MO1 spec wording, "if the process name is not found/finished execution"), and the violation message for a violated one |
 | `process-smi` (MO2) | system-wide CPU/memory utilization + per-running-process memory usage table |
 | `vmstat` (MO2) | total/used/free memory, idle/active/total CPU ticks, num paged in/out |
 | `exit` | quit the emulator |
@@ -50,6 +52,13 @@ Process <name> shut down due to memory access violation error that occurred at <
 ```
 `screen -s`/`screen -c` with an explicit size that fails the power-of-2-in-`[64, 65536]` check
 print `invalid memory allocation` and create nothing (verified in testcases TC9/TC14).
+`screen -c` whose instruction text fails to parse prints `invalid command` and creates nothing —
+the batch is all-or-nothing.
+
+**Consequence worth knowing for demos:** because `screen -r` refuses finished processes, a short
+`screen -c` program (a handful of instructions) will usually have finished before you can detach
+and re-attach to read its `PRINT` output. Inspect it with `process-smi` **while still attached**
+(`screen -c` drops you into the process's screen immediately) rather than via `screen -r`.
 
 ---
 
@@ -134,7 +143,13 @@ Instructions:
 - `virtual std::string toString() const` — source-text representation for the listing.
 - `virtual uint32_t getInstructionCount() const { return 1; }` — always 1 for leaves.
 
-**Six instruction types:**
+**Eight instruction types** (six from MO1, plus `READ`/`WRITE` added in MO2):
+
+**Restart-safety invariant (MO2):** any instruction can be interrupted mid-execution by a page
+fault and re-run from the top. So every `execute()` resolves **all** its reads first and bails on
+a fault *before* performing any mutation or logging — otherwise a restarted instruction would
+double-apply its side effects. `PrintCommand` is the clearest case: it resolves its variable
+first and returns early on fault, so a faulted PRINT never logs twice.
 
 ### PRINT
 - `execute()`: resolves the message (literal or `"prefix" + varName` form), then calls
@@ -143,16 +158,19 @@ Instructions:
 - **Only command that writes to the Logs block** (per spec); all others write nothing.
 
 ### DECLARE
-- `execute()`: `proc.symbolTable.setVariable(name, value)`.
+- `execute()`: `owner.declareVar(name, value)` — writes through the process's own memory at the
+  variable's symbol-table offset, so it can page-fault like any other memory access.
+- Silently does nothing if the 32-variable symbol table is already full (spec).
 - `toString()` → `DECLARE(x, 1000)`
 
 ### ADD
-- `execute()`: `dest = clamp(op2.resolve(st) + op3.resolve(st), 0, 65535)`.
+- `execute()`: resolves both operands (`lhs.resolve(owner, a)`, `rhs.resolve(owner, b)`), bails on
+  fault, then `owner.declareVar(dest, min(a + b, 65535))`.
 - Operands are `Operand` objects (literal uint16 or variable name); missing vars auto-declare to 0.
 - `toString()` → `ADD(x, y, 4)`
 
 ### SUBTRACT
-- `execute()`: `dest = clamp(op2.resolve(st) - op3.resolve(st), 0, 65535)` (floor at 0).
+- Same shape as ADD, with `max(a - b, 0)` (floors at 0 rather than wrapping).
 - `toString()` → `SUBTRACT(x, x, 1)`
 
 ### SLEEP
@@ -168,9 +186,21 @@ Instructions:
   independently logged, independently preemptible by the RR quantum.
 - Nesting capped at depth 3 in `makeFlat()`; body length 1–3 commands; repeats 1–5.
 
+### READ (MO2)
+- `execute()`: `owner.memRead(addr, value)`, bails on fault, then `owner.declareVar(destVar, value)`.
+- Reads a uint16 from a process-relative virtual address; an address never written returns `0`.
+- `toString()` → `READ(varC, 0x500)`
+
+### WRITE (MO2)
+- `execute()`: resolves the value operand (literal *or* variable — the spec uses both forms),
+  bails on fault, then `owner.memWrite(addr, v)`.
+- `toString()` → `WRITE(0x500, varA)`
+
 **`Operand`** (`include/commands/Operand.h`)
 - Either a literal `uint16_t` or a variable name.
-- `resolve(SymbolTable&)`: returns literal value or looks up var (auto-declare to 0 if missing).
+- `bool resolve(Process&, uint16_t& out)`: returns `false` and leaves a fault set on the process if
+  resolving requires a non-resident page (or an out-of-bounds access); callers must stop
+  immediately. Missing variables auto-declare to 0.
 - `toString()`: `"42"` or `"x"`.
 
 ---
@@ -186,7 +216,11 @@ Instructions:
 | `state` | `enum` | `READY / RUNNING / WAITING / FINISHED` |
 | `commandList` | `vector<shared_ptr<ICommand>>` | Flat instruction list (no FOR at runtime) |
 | `commandCounter` | `int` | Index of *next* instruction (0-based internally; +1 for display) |
-| `symbolTable` | `SymbolTable` | Per-process variable store (`name → int`) |
+| `symbolTable` | `SymbolTable` | Variable **name → byte offset** map (the values themselves live in `memoryBytes`, not here) |
+| `memoryBytes` | `vector<uint8_t>` | This process's own virtual address space, `[0, memSize)` |
+| `pageResident` | `vector<bool>` | Page table — which virtual pages currently hold a frame |
+| `fault` / `faultPage` | `MemFault` / `uint64` | Transient fault channel read by `CPUWorker` |
+| `terminatedByViolation` / `violationTime` / `violationAddr` | | Permanent violation record for `screen -r` |
 | `coreId` | `int` | Which core is executing this (-1 if none) |
 | `sleepRequest` | `bool` | SleepCommand sets this; CPUWorker reads and clears it |
 | `sleepTicks` | `uint8_t` | How many ticks to sleep |
@@ -214,7 +248,9 @@ Instructions:
 
 **Process naming:**
 - Auto-generated: `p` + zero-padded 2-digit pid (`p01, p02, …`).
-- Custom: `screen -s <name>` calls `getOrCreateProcess(name)` which passes the name directly.
+- Custom: `screen -s <name>` → `Console::createProcess(name, size, err)`;
+  `screen -c <name> ... "<ins>"` → `Console::createProcessWithInstructions(...)`, which builds the
+  command list from the parsed instruction text instead of the random generator.
 
 ---
 
@@ -273,12 +309,13 @@ Shared implementation for tick counter, waiting list, and watcher thread.
 
 **Free-running clock:**
 ```cpp
-constexpr int CPU_CYCLE_MS = 10;   // 1 tick = 10 ms
+constexpr int CPU_CYCLE_MS = 5;   // 1 tick = 5 ms
 
 void watcherLoop() {
     while (watcherRunning) {
         sleep_for(milliseconds(CPU_CYCLE_MS));
         cpuTick++;                 // free-running — advances even when queue is empty
+        // accumulate idle/active/total tick counters for vmstat
         // move processes with wakeAt <= cpuTick from waiting list → ready queue
     }
 }
@@ -286,6 +323,15 @@ void watcherLoop() {
 
 Tick advances independently of instruction execution, so `SLEEP` timers and
 `batch-process-freq` generation never deadlock when the ready queue drains.
+
+**Why 5 ms:** the tick is the throughput ceiling — in a fixed wall-clock window, total instructions
+executed is bounded by `num-cpu × (window / CPU_CYCLE_MS)`. It's kept comfortably above
+`CPUWorker`'s own 1 ms poll granularity so the tick, not poll jitter, is what actually paces
+execution.
+
+**Tick accounting for `vmstat`:** each tick adds `getNumCores()` to `totalTicks`, splitting it
+between `activeTicks` (cores currently holding a process) and `idleTicks` — so
+`total == idle + active` holds by construction.
 
 ---
 
@@ -297,6 +343,14 @@ for each instruction (up to quantum):
     target = getCpuTick() + 1 + delaysPerExec
     while getCpuTick() < target: sleep 1 ms    // pace to CPU_CYCLE_MS per instruction
     proc->executeCurrentCommand()
+
+    if proc->hasViolation():                   // out-of-bounds access — kill the process
+        violated = true; break
+    if proc->getFault() == PageFault:          // resolve and RETRY the same instruction
+        allocator.handleFault(proc, proc->getFaultPage())
+        proc->clearFault()
+        continue                               // no moveToNextLine(), no ++executed
+
     proc->moveToNextLine()
     if proc->hasSleepRequest():
         addToWaiting(proc, getCpuTick() + sleepTicks)
@@ -352,8 +406,14 @@ genThread:
         sleep 1 ms  // poll loop — avoids busy-spin
 ```
 
-`batchProcessFreq` is measured in CPU ticks (1 tick = 10 ms), so `batch-process-freq 1`
-admits roughly one process per 10 ms; `batch-process-freq 100` ≈ one per second.
+`batchProcessFreq` is measured in CPU ticks (1 tick = 5 ms), so `batch-process-freq 1` admits
+roughly one process per 5 ms and `batch-process-freq 200` ≈ one per second — though in practice the
+observed rate is often lower, bounded by real OS thread-scheduling overhead rather than the nominal
+tick rate.
+
+Each generated process is also assigned a **rolled power-of-two memory size** in
+`[min-mem-per-proc, max-mem-per-proc]` (`Process::setRequestedMemSize`), which the scheduler uses
+when it later admits the process to memory.
 
 ---
 
