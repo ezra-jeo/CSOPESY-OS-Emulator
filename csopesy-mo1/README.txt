@@ -69,15 +69,13 @@ Configuration (config.txt, space-separated "key value" lines):
   delays-per-exec    delay between instructions in cycles  [0, 2^32-1]
   max-overall-mem    total addressable main memory, bytes  power of 2 in [64, 65536]
   mem-per-frame      bytes per frame/page                  power of 2 in [64, 65536]
-  mem-per-proc       legacy flat-model fixed process size  power of 2 in [64, 65536]
-  min-mem-per-proc   MO2 paging: lower bound on a rolled    power of 2 in [64, 65536]
-                     process size (scheduler-start/screen -s/-c with no size)
-  max-mem-per-proc   MO2 paging: upper bound on a rolled    power of 2 in [64, 65536]
-                     process size; >= min-mem-per-proc
-  Presence of either min-mem-per-proc or max-mem-per-proc in config.txt selects the
-  demand-paging allocator (PagingAllocator) over the legacy flat first-fit allocator
-  (FlatMemoryAllocator, keyed off mem-per-proc). Both live behind a MemoryManager
-  facade, so the rest of the program only ever talks to "the memory manager."
+  min-mem-per-proc   lower bound on a rolled process size  power of 2 in [64, 65536]
+                     (scheduler-start/screen -s/-c with no size)
+  max-mem-per-proc   upper bound on a rolled process size  power of 2 in [64, 65536],
+                     >= min-mem-per-proc
+  Both default to 64/4096 if config.txt never mentions them, so a config with no
+  memory keys at all still initializes cleanly under the demand-paging MemoryManager
+  (the only memory manager the emulator has).
 
 Commands (main menu):
   initialize                          load + validate config.txt (run first)
@@ -105,11 +103,9 @@ screen -c instruction syntax (";"-separated, up to 50 instructions):
 
 Output files (written to the working directory / a subdirectory of it):
   csopesy-log.txt              report-util snapshot (CPU util + process table)
-  memory_stamps/               per-quantum flat-model memory snapshots (flat allocator only;
-                                memory_stamp_<N>.txt, ASCII map of occupied blocks)
-  csopesy-backing-store.txt    demand-paging backing store (paging allocator only); created
-                                empty at initialize, rewritten on every page eviction/reload;
-                                readable at any time while the emulator is running
+  csopesy-backing-store.txt    demand-paging backing store; created empty at initialize,
+                                rewritten on every page eviction/reload; readable at any
+                                time while the emulator is running
 
 Errors and edge cases:
   invalid memory allocation    screen -s/-c size isn't a power of 2, or outside [64, 65536]

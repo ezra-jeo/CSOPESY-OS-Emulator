@@ -414,30 +414,19 @@ delays-per-exec 0    # extra CPU ticks to wait before each instruction
 ## 9. MO2 — Demand Paging Additions
 
 Everything below is new relative to Sections 1-8; nothing above changed behaviourally except
-where noted. `config.txt`'s presence of `min-mem-per-proc`/`max-mem-per-proc` is the single
-switch that turns all of this on (`SystemConfig::sawMinMaxMemPerProc`,
-`include/config/SystemConfig.h` / `src/config/SystemConfig.cpp`).
+where noted. Demand paging is the only memory model the emulator has — `min-mem-per-proc`/
+`max-mem-per-proc` in `config.txt` (defaulting to 64/4096 if absent) size every rolled process.
 
 ### `IMemoryAllocator` seam (`include/memory/IMemoryAllocator.h`)
 Abstract interface `Console`/`SchedulerBase` hold instead of a concrete allocator type:
-`allocate`/`deallocate` (legacy), `admit(Process&, size)`, `handleFault(Process&, vpage)`,
-`isDemandPaged()`, `usedBytes`/`freeBytes`/`totalBytes`, `pagedIn`/`pagedOut`.
-- **`MemoryManager`** (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`) — a thin
-  facade, also implementing `IMemoryAllocator`. Its constructor
-  (`demandPaged, totalBytes, frameBytes`) picks one of the two strategies below and owns it as
-  `std::unique_ptr<IMemoryAllocator> strategy`; every method is a one-line forward to `strategy->`.
-  `Console::cmdInitialize` (`src/console/Console.cpp`) always constructs a `MemoryManager` —
-  `std::make_unique<MemoryManager>(sawMinMaxMemPerProc, maxOverallMem, memPerFrame)` — so the rest
-  of the program never needs to know or care which strategy is underneath.
-- **`FlatMemoryAllocator`** (`include/memory/FlatMemoryAllocator.h` /
-  `src/memory/FlatMemoryAllocator.cpp`) — the pre-existing MO1 flat first-fit allocator, unchanged
-  logic, now one of `MemoryManager`'s two strategies. `admit()` binds every page resident
-  immediately (`Process::bindMemory(..., demandPaged=false)`); its `handleFault()` is a
-  never-really-reached `return true`. `pagedIn()`/`pagedOut()` always 0.
-- **`PagingAllocator`** (`include/memory/PagingAllocator.h` / `src/memory/PagingAllocator.cpp`) —
-  the other strategy. Fixed frame table (`maxOverallMem / memPerFrame` frames), FIFO eviction
-  (`loadOrder` deque), an in-memory `store` map mirrored to `csopesy-backing-store.txt` on every
-  eviction.
+`deallocate`, `admit(Process&, size)`, `handleFault(Process&, vpage)`,
+`usedBytes`/`freeBytes`/`totalBytes`, `pagedIn`/`pagedOut`.
+- **`MemoryManager`** (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`) — the
+  one and only `IMemoryAllocator` implementation, a demand-paging allocator. Constructor
+  (`totalBytes, frameBytes`). Fixed frame table (`maxOverallMem / memPerFrame` frames), FIFO
+  eviction (`loadOrder` deque), an in-memory `store` map mirrored to `csopesy-backing-store.txt`
+  on every eviction. `Console::cmdInitialize` (`src/console/Console.cpp`) constructs it as
+  `std::make_unique<MemoryManager>(maxOverallMem, memPerFrame)`.
 
 ### `Process` virtual-address-space / fault-channel API (`include/process/Process.h` /
 `src/process/Process.cpp`)
@@ -449,8 +438,8 @@ Abstract interface `Console`/`SchedulerBase` hold instead of a concrete allocato
   (`include/process/SymbolTable.h`); the first 64 bytes of every process's address space are the
   32-slot symbol-table segment. A 33rd distinct variable name silently no-ops (spec-mandated,
   not an error) instead of writing anywhere.
-- `isPageResident`/`extractPageBytes`/`installPageBytes`/`invalidatePage` — the paging
-  allocator's only touchpoints into a process's page table; the flat allocator never calls these.
+- `isPageResident`/`extractPageBytes`/`installPageBytes`/`invalidatePage` — `MemoryManager`'s only
+  touchpoints into a process's page table.
 - Permanent violation record: `hasViolation()`/`getViolationTime()`/`getViolationAddr()` survive
   `clearFault()`, read later by `MainMenuScreen::handleScreen`'s `screen -r` violation check
   (`src/console/MainMenuScreen.cpp`).

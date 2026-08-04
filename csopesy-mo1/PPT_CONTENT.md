@@ -245,10 +245,8 @@ rolled `[min-mem-per-proc, max-mem-per-proc]` value.
     `screen -r` to report later).
   - `PageFault` — address is in-bounds but its page (`addr / pageSizeBytes`) isn't resident yet.
     Transient: cleared by `clearFault()` once the allocator installs the page.
-- Under the **flat** (non-paged) allocator, `bindMemory(..., demandPaged=false)` makes every page
-  resident immediately at admission — so flat processes can only ever produce `Violation`, never
-  `PageFault`; `IMemoryAllocator::handleFault()` for the flat allocator is a trivial `return true`
-  that's never meaningfully reached.
+- Every process is bound with `demandPaged=true`: pages start non-resident and are brought in on
+  first fault, so both `Violation` and `PageFault` are live outcomes for every process.
 
 ---
 
@@ -311,9 +309,8 @@ watcher handles re-admission. Worker sets `idle = true` and calls `notifySchedul
 
 **MO2 addition — memory admission and page-fault handling** (brief recap; scheduling policy
 itself is unchanged from MO1):
-- Memory admission now goes through `IMemoryAllocator::admit(proc, size)` on a `MemoryManager`
-  facade — the same interface point works whether `config.txt` made `MemoryManager` wrap a
-  `FlatMemoryAllocator` or a `PagingAllocator` underneath.
+- Memory admission goes through `IMemoryAllocator::admit(proc, size)` on `MemoryManager`, the
+  demand-paging memory manager.
 - After `executeCurrentCommand()`, `CPUWorker` checks `proc->getFault()`. A `PageFault` calls
   `allocator.handleFault(*proc, proc->getFaultPage())`, then `proc->clearFault()`, then
   `continue`s the instruction loop **without** calling `moveToNextLine()` or incrementing
@@ -370,25 +367,21 @@ admits roughly one process per 10 ms; `batch-process-freq 100` ≈ one per secon
 | `batch-process-freq` | Ticks between process admissions |
 | `min-ins` / `max-ins` | Instruction count range per process |
 | `delays-per-exec` | Extra ticks waited before each instruction (0 = minimum pace) |
-| `min-mem-per-proc` / `max-mem-per-proc` (MO2) | Range a `scheduler-start`/no-size `screen -s`/`-c` process's memory footprint is rolled from; presence selects `PagingAllocator` |
+| `min-mem-per-proc` / `max-mem-per-proc` (MO2) | Range a `scheduler-start`/no-size `screen -s`/`-c` process's memory footprint is rolled from |
 
 ---
 
 ## Section 6 — Memory Management: Demand Paging and Backing Store
 
-**Two allocators behind one interface (`IMemoryAllocator`, `include/memory/IMemoryAllocator.h`),
-with a `MemoryManager` facade (`include/memory/MemoryManager.h`) that owns whichever one is
-selected and forwards every call to it — the rest of the program only ever talks to
-`MemoryManager`:**
-| | `FlatMemoryAllocator` (flat, MO1) | `PagingAllocator` (demand paging, MO2) |
-|---|---|---|
-| Selected when | `config.txt` never sets `min-mem-per-proc`/`max-mem-per-proc` | either key is present |
-| Placement | First-fit over one contiguous flat address space | Fixed frame table, no contiguity requirement |
-| `admit()` | Finds/splits a free block; fails (caller requeues) if none big enough | Never fails — no physical frames needed up front |
-| Residency | Every page resident immediately (`demandPaged=false`) | Pages start non-resident; brought in on first fault |
-| Eviction | N/A (blocks freed whole on process finish) | FIFO over `loadOrder` (a `deque<frame index>`) |
+**One allocator behind one interface (`IMemoryAllocator`, `include/memory/IMemoryAllocator.h`),
+implemented by `MemoryManager` (`include/memory/MemoryManager.h`) — the rest of the program only
+ever talks to `IMemoryAllocator`:**
+- Fixed frame table (`maxOverallMem / memPerFrame` frames), no contiguity requirement.
+- `admit()` never fails — no physical frames are needed up front.
+- Pages start non-resident; brought into a frame on first fault.
+- Eviction is FIFO over `loadOrder` (a `deque<frame index>`).
 
-**`PagingAllocator` (`include/memory/PagingAllocator.h` / `src/memory/PagingAllocator.cpp`)**
+**`MemoryManager` (`include/memory/MemoryManager.h` / `src/memory/MemoryManager.cpp`)**
 - Physical memory = `frames.size() = maxOverallMem / memPerFrame` fixed-size `Frame` slots.
 - `admit(proc, size)`: no frame allocation — just `proc.setMemory(0, size)` +
   `proc.bindMemory(size, frameBytes, /*demandPaged=*/true)`. Every access starts as a fault.
@@ -405,7 +398,7 @@ selected and forwards every call to it — the rest of the program only ever tal
 - `pagedIn()` / `pagedOut()` — atomic counters surfaced by `vmstat`.
 
 **Backing store (`csopesy-backing-store.txt`):**
-- Created empty (`entries: 0`) the moment `PagingAllocator` is constructed at `initialize` —
+- Created empty (`entries: 0`) the moment `MemoryManager` is constructed at `initialize` —
   present for the whole run, not just after the first fault.
 - Rewritten on every eviction: human-readable dump of `owner=<name> page=<n> bytes=<frameBytes>`
   blocks, each page's bytes shown as little-endian `uint16` words at `[offset]`.
