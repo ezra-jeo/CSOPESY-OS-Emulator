@@ -1,5 +1,5 @@
-CSOPESY MO1 — Process Scheduler and CLI
-=======================================
+CSOPESY MO1/MO2 — Process Scheduler, CLI, and Memory Management
+=================================================================
 
 Group 9 members:
 - Ronald Dawson Catignas
@@ -102,3 +102,29 @@ screen -c instruction syntax (";"-separated, up to 50 instructions):
   READ var 0xADDR              read a uint16 from a process-relative virtual address into var
   PRINT("text")                 log a literal string
   PRINT("text" + var)           log a literal string concatenated with a variable's value
+
+Output files (written to the working directory / a subdirectory of it):
+  csopesy-log.txt              report-util snapshot (CPU util + process table)
+  memory_stamps/               per-quantum flat-model memory snapshots (flat allocator only;
+                                memory_stamp_<N>.txt, ASCII map of occupied blocks)
+  csopesy-backing-store.txt    demand-paging backing store (paging allocator only); created
+                                empty at initialize, rewritten on every page eviction/reload;
+                                readable at any time while the emulator is running
+
+Errors and edge cases:
+  invalid memory allocation    screen -s/-c size isn't a power of 2, or outside [64, 65536]
+  invalid command              screen -c instruction text fails to parse (wrong instruction
+                                count, unknown opcode, wrong argument shape) -- nothing is
+                                created; the whole batch is all-or-nothing
+  memory access violation      a READ/WRITE (or a variable access) outside a process's
+                                [0, memSize) address space terminates it immediately. screen -r
+                                on that process reports:
+                                  Process <name> shut down due to memory access violation error
+                                  that occurred at <HH:MM:SS>. <0xADDR> invalid.
+                                instead of the normal "not found" message.
+
+Test suite:
+  testcases/testcases.md       TC1-TC7 (MO1 regression: FCFS/RR, sleep, report-util) and
+                                TC8-TC14 (MO2: demand paging happy path, access violation,
+                                thrashing, backing-store round-trip, symbol-table cap, config
+                                and allocation rejection) with matching tcN_config.txt files
