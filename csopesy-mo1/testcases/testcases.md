@@ -129,10 +129,12 @@ one un-preemptible step under quantum 20 — see Known Limitations).
 
 ---
 
-## Test Case 7 — First-Fit Flat Memory Allocator (Memory Management Activity)
+## Test Case 7 — Demand-Paging Memory Manager (Memory Management Activity)
 
 **Config (`tc7_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 100 instructions (min=max) ·
-delay-per-exec 0 · max-overall-mem 16384 · mem-per-frame 16 · mem-per-proc 4096 (fixed per process).
+delay-per-exec 0 · max-overall-mem 16384 · mem-per-frame 16 · min-mem-per-proc 64 ·
+max-mem-per-proc 4096 (every rolled process footprint is exactly 4096 bytes, same effective range
+as the old fixed-size config this test started from).
 
 **Sequence:**
 1. `initialize`
@@ -143,12 +145,9 @@ delay-per-exec 0 · max-overall-mem 16384 · mem-per-frame 16 · mem-per-proc 40
 6. `exit`
 
 **Expected:** at most 4 processes resident in memory at once (16384 / 4096); a process that can't
-get a free 4096-byte block when it's its turn reverts to the tail of the ready queue instead of
-running; a process keeps its memory block across quantum preemptions and only releases it on
-finish; several processes finish over the run. Every `quantum-cycles` CPU ticks, `memory_stamps/`
-gets a new `memory_stamp_<qq>.txt` with the timestamp, resident process count, external
-fragmentation in bytes, and a top-down ASCII map of occupied blocks between `----end----` and
-`----start-----`.
+acquire memory when it's its turn reverts to the tail of the ready queue instead of running; a
+process keeps its memory across quantum preemptions and only releases it on finish; several
+processes finish over the run.
 
 ---
 
@@ -156,10 +155,7 @@ fragmentation in bytes, and a top-down ASCII map of occupied blocks between `---
 
 **Config (`tc8_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 10-20 instructions ·
 delays-per-exec 0 · max-overall-mem 2048 · mem-per-frame 256 · min-mem-per-proc 64 ·
-max-mem-per-proc 1024. (`mem-per-proc 2048` is also set — the legacy flat-model field is unused
-once `min/max-mem-per-proc` are present, but `SystemConfig::validate()` still range-checks it
-against `max-overall-mem` regardless of which allocator ends up selected, so it must be set to
-something that fits.)
+max-mem-per-proc 1024.
 
 ```
 initialize
@@ -194,8 +190,8 @@ under Finished Processes as `6 / 6`.
 ## Test Case 9 — Access Violation
 
 **Config (`tc9_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 10-20 instructions ·
-delays-per-exec 0 · max-overall-mem 512 · mem-per-frame 64 · mem-per-proc 512 (legacy field, set
-for the same reason as TC8) · min-mem-per-proc 64 · max-mem-per-proc 256.
+delays-per-exec 0 · max-overall-mem 512 · mem-per-frame 64 · min-mem-per-proc 64 ·
+max-mem-per-proc 256.
 
 ```
 initialize
@@ -223,8 +219,8 @@ and `screen -ls` lists `violator` under **Finished Processes** as `1 / 1`, not u
 
 **Config (`tc10_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 20-40 instructions ·
 delays-per-exec 0 · max-overall-mem 128 · mem-per-frame 64 (**only 2 frames total**) ·
-mem-per-proc 128 · min-mem-per-proc 64 · max-mem-per-proc 128 (every admitted process needs all
-2 frames for itself, and `batch-process-freq 1` keeps admitting more competitors).
+min-mem-per-proc 64 · max-mem-per-proc 128 (every admitted process needs all 2 frames for itself,
+and `batch-process-freq 1` keeps admitting more competitors).
 
 ```
 initialize
@@ -267,7 +263,7 @@ Plus, from a second terminal while the emulator is running: `cat csopesy-backing
 repeated a few seconds apart.
 
 **Verify:** confirmed `csopesy-backing-store.txt` exists in the working directory from the moment
-`PagingAllocator` is constructed at `initialize` (before any fault occurs — it starts as an empty
+`MemoryManager` is constructed at `initialize` (before any fault occurs — it starts as an empty
 `entries: 0` file) and is rewritten on every `handleFault` eviction thereafter. A snapshot taken
 ~2s after `scheduler-start` showed `entries: 2`; a second snapshot ~4s later showed `entries: 10`
 with different byte values at previously-seen offsets (e.g. `owner=p01 page=0 [2]` changed from
@@ -279,8 +275,8 @@ a static file.
 ## Test Case 12 — Symbol Table Cap (32 Variables, 33rd Is Ignored)
 
 **Config (`tc12_config.txt`):** 2 cores · RR · quantum 4 · batch-freq 1 · 10-20 instructions ·
-delays-per-exec 0 · max-overall-mem 2048 · mem-per-frame 256 · mem-per-proc 2048 ·
-min-mem-per-proc 64 · max-mem-per-proc 1024.
+delays-per-exec 0 · max-overall-mem 2048 · mem-per-frame 256 · min-mem-per-proc 64 ·
+max-mem-per-proc 1024.
 
 34-instruction program (33 `DECLARE`s, one per variable `v0`..`v32`, followed by one `PRINT`),
 under the 50-instruction `screen -c` cap:
@@ -310,9 +306,7 @@ validation failures that can't both be expressed as a single `config.txt`:
 **Config (`tc13a_config.txt`):** everything else default; `mem-per-frame 100` (not a power of 2).
 
 **Config (`tc13b_config.txt`):** everything else default; `max-overall-mem 32` (a power of 2, but
-below the 64-byte floor); `mem-per-proc 32` set to match so validation reaches the
-`max-overall-mem` check being demonstrated rather than tripping the (also-present) legacy
-`mem-per-proc <= max-overall-mem` check first.
+below the 64-byte floor).
 
 ```
 initialize

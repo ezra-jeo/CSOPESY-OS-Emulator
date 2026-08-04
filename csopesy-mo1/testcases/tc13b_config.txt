@@ -7,4 +7,3 @@ max-ins 20
 delays-per-exec 0
 max-overall-mem 32
 mem-per-frame 64
-mem-per-proc 32
