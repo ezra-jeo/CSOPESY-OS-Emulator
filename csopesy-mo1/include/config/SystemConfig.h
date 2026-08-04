@@ -16,7 +16,6 @@
 //   delays-per-exec 0
 //   max-overall-mem 16384
 //   mem-per-frame 64
-//   mem-per-proc 4096
 //   min-mem-per-proc 64
 //   max-mem-per-proc 4096
 struct SystemConfig {
@@ -31,21 +30,16 @@ struct SystemConfig {
     std::uint32_t maxIns          = 1;       // [1, 2^32-1]; must be >= minIns
     std::uint32_t delaysPerExec   = 0;       // [0, 2^32-1]; 0 = one instruction per tick
 
-    // First-fit flat memory allocator (lecture: "Emulating a first-fit flat memory model").
-    std::uint64_t maxOverallMem   = 16384;   // total main memory in bytes; >= memPerProc
+    // Demand-paging memory manager (MO2).
+    std::uint64_t maxOverallMem   = 16384;   // total main memory in bytes
     std::uint64_t memPerFrame     = 64;      // bytes per frame; power of two in [64, 65536]
-    std::uint64_t memPerProc      = 4096;    // fixed per-process footprint; >= 1
 
-    // MO2 demand-paging process sizing: scheduler_start rolls each new process's footprint
-    // from [minMemPerProc, maxMemPerProc] instead of the fixed legacy memPerProc. Both must be
-    // powers of two in [2^6, 2^16] (see validate()).
+    // scheduler-start (and no-size screen -s/-c) rolls each new process's footprint from
+    // [minMemPerProc, maxMemPerProc]. Both must be powers of two in [2^6, 2^16] (see validate()).
+    // These govern process sizing unconditionally — a config that never mentions them still
+    // works, defaulting to 64/4096.
     std::uint64_t minMemPerProc   = 64;      // lower bound on a scheduler_start process's size
     std::uint64_t maxMemPerProc   = 4096;    // upper bound on a scheduler_start process's size
-
-    // True once load() has seen either min-mem-per-proc or max-mem-per-proc in config.txt.
-    // Later steps use this to pick the allocator: demand paging when set, flat first-fit
-    // (keyed off the legacy memPerProc) when the config never mentions the MO2 keys.
-    bool sawMinMaxMemPerProc = false;
 
     // Parses `path`, validating every parameter against its allowed range.
     // Returns true on success; on failure returns false and fills `err` with a

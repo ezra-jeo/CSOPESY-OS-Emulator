@@ -53,7 +53,7 @@ public:
     // Used by process-smi to show the program with a pointer at the current line.
     std::vector<std::string> getInstructionListing() const;
 
-    // --- Memory manager bookkeeping (first-fit flat allocator) ---
+    // --- Memory manager bookkeeping ---
     // A process keeps its memory block from first dispatch until it finishes;
     // preemption at the end of a quantum does NOT release it.
     void          setMemory(std::uint64_t base, std::uint64_t size);
@@ -63,7 +63,7 @@ public:
 
     // Communicates a specific memory size to use the FIRST time this process is admitted
     // (screen -s/-c give an explicit size). 0 (the default) means "unset" — SchedulerBase::
-    // acquireMemory falls back to its configured memPerProc, unchanged from before this step.
+    // acquireMemory falls back to a small hardcoded defensive floor in that case.
     void          setRequestedMemSize(std::uint64_t size);
     std::uint64_t getRequestedMemSize() const;
 

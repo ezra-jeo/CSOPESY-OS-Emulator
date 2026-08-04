@@ -18,7 +18,7 @@ class CPUWorker; // forward declaration
 class RRScheduler : public SchedulerBase {
 public:
     RRScheduler(int numCores, std::uint32_t quantumCycles, std::uint32_t delaysPerExec,
-                IMemoryAllocator& memory, std::uint64_t memPerProc);
+                IMemoryAllocator& memory);
     ~RRScheduler() override;
 
     void addProcess(std::shared_ptr<Process> p) override;

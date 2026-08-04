@@ -10,11 +10,11 @@
 
 // Intermediate base class shared by FCFSScheduler and RRScheduler.
 // Provides the CPU tick counter, waiting list, a watcher thread that re-admits sleeping
-// processes once their tick expiry is reached, and the first-fit memory allocator hooks
+// processes once their tick expiry is reached, and the memory allocator hooks
 // (acquireMemory/releaseMemory) both scheduling policies dispatch through.
 class SchedulerBase : public IScheduler {
 public:
-    SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
+    SchedulerBase(IMemoryAllocator& memory, std::uint32_t quantumCycles);
 
 protected:
     void startWatcher();
@@ -23,7 +23,7 @@ protected:
     // Subclass pushes p to its own ready queue and notifies its scheduler CV.
     virtual void requeueReady(std::shared_ptr<Process> p) = 0;
 
-    // Secures memPerProc bytes for p (no-op if p already holds memory from an earlier
+    // Secures p's requested memory (no-op if p already holds memory from an earlier
     // quantum). Returns false if the memory manager has no block large enough right now —
     // the caller should push p back onto the tail of its ready queue and try another candidate
     // ("if memory is full when a process is scheduled, it reverts to the tail of the queue").
@@ -59,8 +59,5 @@ private:
     std::thread       watcherThread;
 
     IMemoryAllocator& memory;
-    std::uint64_t  memPerProc;
-    std::uint32_t  quantumCycles;      // also the memory-snapshot cadence, in CPU ticks
-    int            quantumSnapshotIndex = 0;
-    std::uint32_t  ticksSinceSnapshot   = 0;
+    std::uint32_t  quantumCycles;
 };

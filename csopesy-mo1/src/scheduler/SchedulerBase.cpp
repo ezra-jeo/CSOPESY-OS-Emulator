@@ -8,17 +8,21 @@
 // instruction consumes (1 + delays-per-exec) cycles — so processes advance at an observable rate
 // even when delays-per-exec is 0. Also the unit for SLEEP ticks and batch-process-freq. Tunable.
 namespace {
-    constexpr int         CPU_CYCLE_MS    = 200;
-    constexpr const char* MEMORY_STAMP_DIR = "memory_stamps";
+    constexpr int CPU_CYCLE_MS = 200;
+
+    // Defensive floor only — every process already gets a real requested size (via
+    // Process::setRequestedMemSize) before it ever reaches acquireMemory, so this is not an
+    // expected code path. Matches the spec's minimum process footprint.
+    constexpr std::uint64_t kMinProcessMemory = 64;
 }
 
-SchedulerBase::SchedulerBase(IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
-    : memory(memory), memPerProc(memPerProc), quantumCycles(quantumCycles) {}
+SchedulerBase::SchedulerBase(IMemoryAllocator& memory, std::uint32_t quantumCycles)
+    : memory(memory), quantumCycles(quantumCycles) {}
 
 bool SchedulerBase::acquireMemory(const std::shared_ptr<Process>& p) {
     if (p->hasMemory()) return true;
     std::uint64_t size = p->getRequestedMemSize();
-    if (size == 0) size = memPerProc;
+    if (size == 0) size = kMinProcessMemory;
     return memory.admit(*p, size);
 }
 
@@ -95,12 +99,6 @@ void SchedulerBase::watcherLoop() {
         for (auto& p : toWake) {
             p->setState(Process::READY);
             requeueReady(std::move(p));
-        }
-
-        // For every quantum-cycles CPU ticks, snapshot the memory map to memory_stamp_<qq>.txt.
-        if (++ticksSinceSnapshot >= quantumCycles) {
-            ticksSinceSnapshot = 0;
-            memory.writeSnapshot(++quantumSnapshotIndex, MEMORY_STAMP_DIR);
         }
     }
 }

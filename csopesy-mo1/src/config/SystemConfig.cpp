@@ -20,11 +20,10 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
         {"delay-per-exec",     &delaysPerExec},
     };
 
-    // First-fit memory allocator parameters — byte counts, so 64-bit.
+    // Demand-paging memory manager parameters — byte counts, so 64-bit.
     const std::unordered_map<std::string, uint64_t*> numericFields64 = {
         {"max-overall-mem",   &maxOverallMem},
         {"mem-per-frame",     &memPerFrame},
-        {"mem-per-proc",      &memPerProc},
         {"min-mem-per-proc",  &minMemPerProc},
         {"max-mem-per-proc",  &maxMemPerProc},
     };
@@ -60,8 +59,6 @@ bool SystemConfig::load(const std::string& path, std::string& err) {
                 numCpu = static_cast<std::int32_t>(std::stoi(value));
             } else if (auto it64 = numericFields64.find(key); it64 != numericFields64.end()) {
                 *it64->second = static_cast<uint64_t>(std::stoull(value));
-                if (key == "min-mem-per-proc" || key == "max-mem-per-proc")
-                    sawMinMaxMemPerProc = true;
             } else {
                 auto it = numericFields.find(key);
                 if (it == numericFields.end()) {
@@ -141,18 +138,5 @@ bool SystemConfig::validate(std::string& err) const {
         return false;
     }
 
-    // mem-per-proc is a legacy field the paging allocator never reads (PagingAllocator::admit
-    // sizes each process from min/max-mem-per-proc instead). Validating it against a config that
-    // never mentions it would reject otherwise-correct MO2 configs on the strength of an unused
-    // default (e.g. a tight max-overall-mem below the legacy 4096-byte default) — so only the
-    // flat allocator's config path checks it.
-    if (!sawMinMaxMemPerProc) {
-        if (!validateMemSize("mem-per-proc", memPerProc, err)) return false;
-        if (memPerProc > maxOverallMem) {
-            err = "mem-per-proc (" + std::to_string(memPerProc) + ") must be <= max-overall-mem ("
-                + std::to_string(maxOverallMem) + ")";
-            return false;
-        }
-    }
     return true;
 }

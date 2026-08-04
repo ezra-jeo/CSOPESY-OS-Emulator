@@ -157,15 +157,14 @@ void Console::cmdInitialize() {
         return;
     }
 
-    memory = std::make_unique<MemoryManager>(
-        config.sawMinMaxMemPerProc, config.maxOverallMem, config.memPerFrame);
+    memory = std::make_unique<MemoryManager>(config.maxOverallMem, config.memPerFrame);
 
     if (config.scheduler == SystemConfig::Scheduler::FCFS)
         scheduler = std::make_unique<FCFSScheduler>(
-            config.numCpu, config.delaysPerExec, *memory, config.memPerProc, config.quantumCycles);
+            config.numCpu, config.delaysPerExec, *memory, config.quantumCycles);
     else
         scheduler = std::make_unique<RRScheduler>(
-            config.numCpu, config.quantumCycles, config.delaysPerExec, *memory, config.memPerProc);
+            config.numCpu, config.quantumCycles, config.delaysPerExec, *memory);
 
     scheduler->start();
     generator = std::make_unique<ProcessGenerator>(config);
@@ -174,8 +173,8 @@ void Console::cmdInitialize() {
     const char* policy = (config.scheduler == SystemConfig::Scheduler::FCFS) ? "FCFS" : "RR";
     std::string statusLine = "initialized — "
         + std::to_string(config.numCpu) + " core(s), scheduler=" + policy
-        + ", mem=" + std::to_string(config.maxOverallMem) + "B (mem-per-proc "
-        + std::to_string(config.memPerProc) + "B)";
+        + ", mem=" + std::to_string(config.maxOverallMem) + "B (frame="
+        + std::to_string(config.memPerFrame) + "B)";
     printBanner(statusLine);
 }
 

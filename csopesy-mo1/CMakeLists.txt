@@ -32,10 +32,8 @@ set(SOURCES
     src/scheduler/RRScheduler.cpp
     # ── Config ───────────────────────────────────────────────────────────────
     src/config/SystemConfig.cpp
-    # ── Memory (MemoryManager facade over FlatMemoryAllocator / PagingAllocator) ─
+    # ── Memory (demand-paging allocator) ────────────────────────────────────
     src/memory/MemoryManager.cpp
-    src/memory/FlatMemoryAllocator.cpp
-    src/memory/PagingAllocator.cpp
 )
 
 add_executable(csopesy ${SOURCES})

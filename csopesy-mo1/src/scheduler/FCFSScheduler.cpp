@@ -4,8 +4,8 @@
 #include <thread>
 
 FCFSScheduler::FCFSScheduler(int numCores, std::uint32_t delaysPerExec,
-                              IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles)
-    : SchedulerBase(memory, memPerProc, quantumCycles),
+                              IMemoryAllocator& memory, std::uint32_t quantumCycles)
+    : SchedulerBase(memory, quantumCycles),
       numCores(numCores), delaysPerExec(delaysPerExec) {
     workers.reserve(numCores);
     for (int i = 0; i < numCores; ++i)

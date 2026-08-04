@@ -18,7 +18,7 @@ class CPUWorker; // forward declaration — avoids circular include with CPUWork
 class FCFSScheduler : public SchedulerBase {
 public:
     FCFSScheduler(int numCores, std::uint32_t delaysPerExec,
-                  IMemoryAllocator& memory, std::uint64_t memPerProc, std::uint32_t quantumCycles);
+                  IMemoryAllocator& memory, std::uint32_t quantumCycles);
     ~FCFSScheduler() override;
 
     void addProcess(std::shared_ptr<Process> p) override;
