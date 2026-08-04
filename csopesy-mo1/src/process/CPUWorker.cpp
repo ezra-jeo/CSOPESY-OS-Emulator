@@ -63,10 +63,15 @@ void CPUWorker::workerLoop() {
         while (!proc->isFinished()) {
             if (quantum > 0 && executed >= quantum) break; // quantum expired
 
-            // Pace execution to the CPU clock: each instruction consumes (1 + delaysPerExec)
-            // cycles (the spec's "one instruction per cycle" when delays-per-exec is 0). The tick
-            // is advanced by the scheduler's free-running clock (SchedulerBase::watcherLoop).
-            const std::uint64_t target = scheduler.getCpuTick() + 1 + delaysPerExec;
+            // Pace execution to the CPU clock: an instruction occupies max(1, delaysPerExec)
+            // cycles — the spec's "one instruction per cycle" when delays-per-exec is 0, and
+            // delays-per-exec cycles otherwise. Counting the delay as the instruction's whole
+            // cost (rather than 1 + delay) keeps a process's total runtime comparable to the
+            // batch-process-freq arrival interval, which is what lets a single-core, high-freq
+            // configuration actually drain its ready queue and go idle. The tick is advanced by
+            // the scheduler's free-running clock (SchedulerBase::watcherLoop).
+            const std::uint64_t target =
+                scheduler.getCpuTick() + (delaysPerExec ? delaysPerExec : 1);
             while (running.load() && scheduler.getCpuTick() < target)
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             if (!running.load()) break; // shutting down
