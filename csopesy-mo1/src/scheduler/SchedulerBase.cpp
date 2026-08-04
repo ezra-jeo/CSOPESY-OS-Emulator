@@ -7,8 +7,14 @@
 // Wall-clock duration of one CPU cycle (tick). Workers pace execution to this clock — each
 // instruction consumes (1 + delays-per-exec) cycles — so processes advance at an observable rate
 // even when delays-per-exec is 0. Also the unit for SLEEP ticks and batch-process-freq. Tunable.
+//
+// Kept well above CPUWorker's own 1ms poll granularity (see CPUWorker::workerLoop's pacing loop)
+// so the tick, not poll jitter, is what actually paces execution. At 5ms/tick, a fixed wall-clock
+// window (e.g. a timed quiz scenario waiting N real seconds) admits far more instruction
+// executions than the previous 200ms/tick allowed — needed for demand-paging thrash scenarios
+// where a very high paged-in/paged-out count is expected within a short, fixed real-time window.
 namespace {
-    constexpr int CPU_CYCLE_MS = 200;
+    constexpr int CPU_CYCLE_MS = 5;
 
     // Defensive floor only — every process already gets a real requested size (via
     // Process::setRequestedMemSize) before it ever reaches acquireMemory, so this is not an

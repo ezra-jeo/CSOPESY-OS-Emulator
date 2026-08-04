@@ -234,13 +234,14 @@ exit
 ```
 
 **Verify:** confirmed `vmstat`'s `num paged in` / `num paged out` are both > 0 and track each
-other closely (one run: 87 in / 85 out after 10s; 75 in / 73 out after 20s — FIFO eviction keeps
-paging in as fast as it pages out). The emulator stays fully responsive throughout — `vmstat`,
-`process-smi`, `screen -ls`, `scheduler-stop`, and `exit` all return promptly; there is no
-deadlock/hang. `screen -ls`'s Running section does **not** show `0 / N` frozen forever — command
-counters creep forward slowly across repeated snapshots (e.g. `5 / 20` and `4 / 31` after 20s) —
-but with only 2 frames shared across every concurrently-admitted process, throughput stays far
-below what the CPU-tick count alone would suggest. That slow-but-nonzero, paging-dominated
+other closely (one run: 3687 in / 3685 out after 10s — FIFO eviction keeps paging in as fast as
+it pages out). The emulator stays fully responsive throughout — `vmstat`, `process-smi`,
+`screen -ls`, `scheduler-stop`, and `exit` all return promptly; there is no deadlock/hang.
+`screen -ls`'s Running section does **not** show `0 / N` frozen forever — command counters creep
+forward across repeated snapshots (e.g. `3 / 29` and `9 / 33` after 10s) — but with only 2 frames
+shared across every concurrently-admitted process, throughput stays far below what the CPU-tick
+count alone would suggest (100% CPU-Util, 100% Memory Util the whole time). That slow-but-nonzero,
+paging-dominated
 progress *is* the thrashing signature this test is checking for, as opposed to a livelocked or
 crashed scheduler.
 
